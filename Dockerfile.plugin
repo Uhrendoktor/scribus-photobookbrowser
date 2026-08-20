@@ -1,0 +1,93 @@
+ARG SCRIBUS_VERSION
+ARG VERSION
+
+FROM scribus-photobook-browser:scribus-${SCRIBUS_VERSION}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV TZ=UTC
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# ------------------------------------------------------------
+# Copy plugin into Scribus source tree
+# ------------------------------------------------------------
+
+COPY --chown=builder:builder plugin \
+    /opt/scribus-source/scribus/scribus/plugins/photobookbrowser
+
+# ------------------------------------------------------------
+# Enable plugin in Scribus's plugin CMake file
+# ------------------------------------------------------------
+
+RUN grep -q 'add_subdirectory(picbrowser)' \
+        /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt \
+    || grep -q 'ADD_SUBDIRECTORY(picbrowser)' \
+        /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt
+
+RUN if grep -q 'add_subdirectory(picbrowser)' \
+        /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt; then \
+        sed -i '/add_subdirectory(picbrowser)/a add_subdirectory(photobookbrowser)' \
+        /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt; \
+    else \
+        sed -i '/ADD_SUBDIRECTORY(picbrowser)/a ADD_SUBDIRECTORY(photobookbrowser)' \
+        /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt; \
+    fi
+
+# ------------------------------------------------------------
+# Configure
+# ------------------------------------------------------------
+
+WORKDIR /opt/scribus-source/scribus
+
+RUN cmake \
+    -S . \
+    -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_INSTALL_PREFIX=/opt/scribus-install \
+    -DWANT_PCH=OFF \
+    -DCMAKE_CXX_FLAGS="-O2 -g"
+
+# ------------------------------------------------------------
+# Build
+# ------------------------------------------------------------
+
+RUN cmake \
+    --build build \
+    --target photobookbrowser \
+    --parallel ${BUILD_JOBS}
+
+# ------------------------------------------------------------
+# Install Scribus + plugin into staging directory
+# ------------------------------------------------------------
+
+RUN cmake \
+    --install build
+
+# ------------------------------------------------------------
+# Verify plugin was actually produced
+# ------------------------------------------------------------
+
+RUN find /opt/scribus-install \
+        -type f \
+        \( -name '*photobookbrowser*.so' -o -name 'photobookbrowser.so' \) \
+        -print \
+    | tee /tmp/plugin-files.txt \
+    && test -s /tmp/plugin-files.txt
+
+# ------------------------------------------------------------
+# Runtime entrypoint
+# ------------------------------------------------------------
+
+COPY --chown=builder:builder docker/entrypoint.sh \
+    /usr/local/bin/photobook-entrypoint
+
+USER root
+
+RUN chmod +x /usr/local/bin/photobook-entrypoint
+
+USER builder
+
+ENTRYPOINT ["/usr/local/bin/photobook-entrypoint", ${SCRIBUS_VERSION}, ${VERSION}]
