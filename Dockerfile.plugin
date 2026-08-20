@@ -90,4 +90,4 @@ RUN chmod +x /usr/local/bin/photobook-entrypoint
 
 USER builder
 
-ENTRYPOINT ["/usr/local/bin/photobook-entrypoint", ${SCRIBUS_VERSION}, ${VERSION}]
+ENTRYPOINT ["/usr/local/bin/photobook-entrypoint", "${SCRIBUS_VERSION}", "${VERSION}"]
