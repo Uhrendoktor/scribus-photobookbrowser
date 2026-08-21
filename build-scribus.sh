@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.6.5}"
+SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.7.2}"
 IMAGE="scribus-photobook-browser:scribus-${SCRIBUS_VERSION}"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "${SCRIPT_DIR}/dist"
 
-echo "Building Docker image..."
+echo "Building Docker image for Scribus ${SCRIBUS_VERSION}..."
 docker build \
     --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
     --build-arg "SCRIBUS_VERSION=${SCRIBUS_VERSION}" \
