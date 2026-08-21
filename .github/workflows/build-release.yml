@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: photobookbrowser-${{ matrix.scribus-version }}-${{ env.BUILD_VERSION }}
-          path: ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          path: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
           if-no-files-found: error
           retention-days: 14
 
@@ -59,4 +59,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
