@@ -52,3 +52,24 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+
+  record-test-result:
+    if: always() && github.ref == 'refs/heads/port/scribus-1.7.x'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Record matrix result in a temporary tag
+        env:
+          RESULT_TAG: test-scribus-1.7x-20260821-${{ needs.build.result }}
+          TEST_TAG: test-scribus-1.7x-20260821
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${RESULT_TAG}" "${GITHUB_SHA}"
+          git push --force origin "${RESULT_TAG}"
+          git push origin --delete "${TEST_TAG}" || true
