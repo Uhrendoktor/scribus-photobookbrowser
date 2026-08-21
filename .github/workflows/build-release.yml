@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     branches:
-      - "port/scribus-1.7.x"
+      - "port/scribus-1.7x-unified-docker-20260821"
     tags:
       - "*"
 
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/port/scribus-1.7.x' || startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/port/scribus-1.7x-unified-docker-20260821' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -26,7 +26,7 @@ jobs:
       contents: write
 
     env:
-      BUILD_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'test-scribus-port-20260821' }}
+      BUILD_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('test-{0}', github.run_id) }}
 
     steps:
       - name: Checkout
