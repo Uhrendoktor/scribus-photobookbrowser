@@ -14,14 +14,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Create temporary test tag
         env:
-          GH_TOKEN: ${{ github.token }}
           TEST_TAG: test-scribus-1.7x-20260821
         run: |
           set -euo pipefail
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --tags origin
           if git ls-remote --exit-code --tags origin "refs/tags/${TEST_TAG}" >/dev/null 2>&1; then
             echo "Temporary tag already exists: ${TEST_TAG}"
