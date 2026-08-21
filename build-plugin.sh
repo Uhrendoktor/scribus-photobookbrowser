@@ -6,7 +6,7 @@ IMAGE="scribus-photobook-browser:plugin"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.7.3}"
-VERSION="$(grep -oP 'about->version\s*=\s*QStringLiteral\("([^"]+)"\);' "${SCRIPT_DIR}/plugin/photobookbrowserplugin.cpp" | head -n 1 | cut -d '"' -f 2)"
+VERSION="${VERSION:-$(grep -oP 'about->version\s*=\s*QStringLiteral\("([^"]+)"\);' "${SCRIPT_DIR}/plugin/photobookbrowserplugin.cpp" | head -n 1 | cut -d '"' -f 2)}"
 
 mkdir -p "${SCRIPT_DIR}/dist"
 
