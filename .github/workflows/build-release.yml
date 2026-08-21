@@ -7,6 +7,10 @@ on:
     tags:
       - "*"
 
+concurrency:
+  group: scribus-1.7x-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   prepare-test-tag:
     if: github.ref == 'refs/heads/port/scribus-1.7.x'
