@@ -1,0 +1,49 @@
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG SCRIBUS_VERSION
+ARG SCRIBUS_URL=https://downloads.sourceforge.net/project/scribus/scribus/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz
+ARG BUILD_JOBS
+
+ENV TZ=UTC
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates cmake git wget curl bzip2 xz-utils file pkg-config ccache \
+    extra-cmake-modules gettext \
+    libcairo2-dev libcdr-dev libcups2-dev libfreehand-dev libgraphicsmagick++1-dev \
+    libharfbuzz-dev libhunspell-dev libhyphen-dev libicu-dev liblcms2-dev libmspub-dev \
+    libopenscenegraph-dev libpagemaker-dev libpng-dev libpodofo-dev libpoppler-cpp-dev \
+    libpoppler-dev libpoppler-private-dev libqxp-dev librevenge-dev libtiff-dev libvisio-dev \
+    libwpg-dev libxml2-dev libzmf-dev \
+    libqt5opengl5-dev libqt5webkit5-dev qtbase5-dev qttools5-dev qttools5-dev-tools \
+    python3-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash builder
+RUN mkdir -p /workspace /opt/scribus-source /opt/scribus-install \
+    && chown -R builder:builder /workspace /opt/scribus-source /opt/scribus-install
+
+USER builder
+WORKDIR /workspace
+
+RUN wget --progress=bar:force:noscroll \
+    -O /tmp/scribus-${SCRIBUS_VERSION}.tar.xz "${SCRIBUS_URL}" \
+    && tar -xJf /tmp/scribus-${SCRIBUS_VERSION}.tar.xz -C /opt/scribus-source \
+    && mv /opt/scribus-source/scribus-${SCRIBUS_VERSION} /opt/scribus-source/scribus \
+    && rm /tmp/scribus-${SCRIBUS_VERSION}.tar.xz
+
+WORKDIR /opt/scribus-source/scribus
+RUN cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_INSTALL_PREFIX=/opt/scribus-install \
+    -DWANT_PCH=OFF \
+    -DCMAKE_CXX_FLAGS="-O2 -g"
+
+RUN cmake --build build --parallel ${BUILD_JOBS}
+RUN cmake --install build
+
+USER builder
