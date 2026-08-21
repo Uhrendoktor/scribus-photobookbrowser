@@ -12,25 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare-test-tag:
-    if: github.ref == 'refs/heads/port/scribus-1.7.x'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Create temporary test tag marker
-        env:
-          TEST_TAG: test-scribus-1.7x-20260821
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch --tags origin
-          git tag -f "${TEST_TAG}" "${GITHUB_SHA}"
-          git push --force origin "${TEST_TAG}"
-
   build:
     if: github.ref == 'refs/heads/port/scribus-1.7.x' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -71,26 +52,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
-
-  record-test-result:
-    if: always() && github.ref == 'refs/heads/port/scribus-1.7.x'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Record matrix result in a temporary tag
-        env:
-          RESULT_TAG: test-scribus-1.7x-20260821-${{ needs.build.result }}
-          TEST_TAG: test-scribus-1.7x-20260821
-        run: |
-          set -euo pipefail
-          git init
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout --detach FETCH_HEAD
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "${RESULT_TAG}" "${GITHUB_SHA}"
-          git push --force origin "${RESULT_TAG}"
-          git push origin --delete "${TEST_TAG}" || true
