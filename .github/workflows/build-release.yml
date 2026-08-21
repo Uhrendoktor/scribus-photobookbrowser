@@ -10,8 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        scribus-version: [1.6.5, 1.6.6]
+        scribus-version: [1.7.0, 1.7.1, 1.7.2]
 
     permissions:
       contents: write
@@ -23,12 +24,12 @@ jobs:
       - name: Build Scribus
         run: |
           chmod +x ./build-scribus.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} ./build-scribus.sh
+          SCRIBUS_VERSION=${{ matrix.scribus-version }} BUILD_JOBS=2 ./build-scribus.sh
 
       - name: Build Plugin
         run: |
           chmod +x ./build-plugin.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION=${{ github.ref_name }} ./build-plugin.sh
+          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION=${{ github.ref_name }} BUILD_JOBS=2 ./build-plugin.sh
 
       - name: Verify exported artifact
         run: |
