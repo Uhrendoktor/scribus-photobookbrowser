@@ -1,10 +1,12 @@
 ARG SCRIBUS_VERSION
 ARG VERSION
+ARG BUILD_JOBS
 
 FROM scribus-photobook-browser:scribus-${SCRIBUS_VERSION}
 
 ARG SCRIBUS_VERSION
 ARG VERSION
+ARG BUILD_JOBS
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -15,7 +17,7 @@ ENV LC_ALL=C.UTF-8
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ------------------------------------------------------------
-# Copy plugin into Scribus source tree
+# Copy plugin into Scribus 1.7.x source tree
 # ------------------------------------------------------------
 
 COPY --chown=builder:builder plugin \
