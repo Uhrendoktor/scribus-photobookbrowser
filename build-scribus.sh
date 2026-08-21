@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.7.2}"
+SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.7.3}"
 IMAGE="scribus-photobook-browser:scribus-${SCRIBUS_VERSION}"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
