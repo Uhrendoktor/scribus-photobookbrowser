@@ -20,14 +20,15 @@ Browse your photos directly in Scribus, see which ones you have already used, an
 
 Choose the download that matches your **Scribus version**.
 
-Currently supported scribus versions:
+Currently supported Scribus versions:
 
 | Scribus |
 |---|
-| 1.6.5 |
-| 1.6.6 | 
+| 1.7.0 |
+| 1.7.1 |
+| 1.7.2 |
 
-> **Important:** Use the plugin that matches your Scribus version.
+> **Important:** Use the plugin that matches your Scribus version. Scribus 1.7.x is the development series leading toward Scribus 1.8.0.
 
 ## Installation
 
@@ -39,31 +40,28 @@ Currently supported scribus versions:
 
 3. **Copy the `.so` file into your Scribus plugin folder.**
 
-   the plugin path depends on your installation
-
-   For a typical user installation:
+   The plugin path depends on your installation. For a typical Linux user installation:
 
    | | Linux | Windows | Mac |
    | --- | --- | --- | --- |
-   | user | ~/.local/lib/scribus/plugins | - | - 
-   | global | /urs/lib/scribus/plugins | C:\Program Files\Scribus [Version]\plugins\ | -
+   | user | ~/.local/lib/scribus/plugins | - | - |
+   | global | /usr/lib/scribus/plugins | C:\Program Files\Scribus [Version]\plugins\ | - |
 
    ```bash
    cp ~/Downloads/photobookbrowser*.so <path>/libphotobookbrowser.so
    ```
 
 4. **Restart Scribus.**
-5. validate that the plugin was loaded correctly. Open `File->Preferences->Plugins` and check that the plugin was loaded.
-![plugin loaded](assets/plugin_loaded.png)
+5. Validate that the plugin was loaded correctly. Open **File → Preferences → Plugins** and check that the plugin was loaded.
 
-That's it.
+![plugin loaded](assets/plugin_loaded.png)
 
 If your Scribus installation uses a different plugin folder, place the file in that folder instead.
 
 ## Getting Started
 
 1. Open your photo book in Scribus.
-2. Open **PhotoBook Browser** Window from the Scribus **Windows** menu.
+2. Open **PhotoBook Browser** from the Scribus **Windows** menu.
 3. Select the folder containing your photos.
 4. Browse your images.
 5. Use the status indicator to see which photos are already in your document.
@@ -71,6 +69,16 @@ If your Scribus installation uses a different plugin folder, place the file in t
 
 The browser updates as you work, so you can use it as a simple visual checklist for your photo book.
 
+## Building
+
+The project builds against Scribus 1.7.x in Docker using Ubuntu 24.04 and Qt 6. The default local build target is Scribus 1.7.2.
+
+```bash
+SCRIBUS_VERSION=1.7.2 ./build-plugin.sh
+```
+
+CI builds the plugin against Scribus 1.7.0, 1.7.1, and 1.7.2.
+
 ## Contributions
 
-All contributions are welcome :)
+All contributions are welcome.
