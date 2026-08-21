@@ -7,14 +7,20 @@ IMAGE="scribus-photobook-browser:scribus-${SCRIBUS_VERSION}"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+case "${SCRIBUS_VERSION}" in
+    1.6.*) DOCKERFILE="${SCRIPT_DIR}/Dockerfile.scribus-1.6" ;;
+    1.7.*) DOCKERFILE="${SCRIPT_DIR}/Dockerfile.scribus" ;;
+    *) echo "Unsupported Scribus version: ${SCRIBUS_VERSION}" >&2; exit 2 ;;
+esac
+
 mkdir -p "${SCRIPT_DIR}/dist"
 
-echo "Building Docker image for Scribus ${SCRIBUS_VERSION}..."
+echo "Building Scribus ${SCRIBUS_VERSION} Docker image..."
 docker build \
     --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
     --build-arg "SCRIBUS_VERSION=${SCRIBUS_VERSION}" \
     --tag "${IMAGE}" \
-    -f "${SCRIPT_DIR}/Dockerfile.scribus" \
+    -f "${DOCKERFILE}" \
     "${SCRIPT_DIR}"
 
 echo
