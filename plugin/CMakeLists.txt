@@ -18,12 +18,15 @@ add_library(${SCRIBUS_PHOTOBOOKBROWSER_PLUGIN} MODULE
 	${PHOTOBOOKBROWSER_PLUGIN_SOURCES}
 )
 
-# Scribus 1.7.x is Qt 6 based. Thumbnail decoding uses QtConcurrent::run().
-find_package(Qt6 REQUIRED COMPONENTS Concurrent)
+# Thumbnail decoding runs on QtConcurrent::run(). Scribus 1.6.x uses Qt 5,
+# while Scribus 1.7.x uses Qt 6. Select the Qt major version already used by
+# the Scribus build instead of hard-coding one series.
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Concurrent)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent)
 
 target_link_libraries(${SCRIBUS_PHOTOBOOKBROWSER_PLUGIN}
 	${EXE_NAME}
-	Qt6::Concurrent
+	Qt${QT_VERSION_MAJOR}::Concurrent
 )
 
 if(WANT_PCH)
