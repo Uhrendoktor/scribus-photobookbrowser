@@ -33,12 +33,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2-dev \
     libcdr-dev \
     libcups2-dev \
+    libfontconfig1-dev \
     libfreehand-dev \
+    libfreetype6-dev \
     libgraphicsmagick++1-dev \
     libharfbuzz-dev \
     libhunspell-dev \
     libhyphen-dev \
     libicu-dev \
+    libjpeg-dev \
     liblcms2-dev \
     libmspub-dev \
     libopenscenegraph-dev \
@@ -55,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwpg-dev \
     libxml2-dev \
     libzmf-dev \
+    libboost-dev \
     \
     qt6-base-dev \
     qt6-5compat-dev \
