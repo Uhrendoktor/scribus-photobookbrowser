@@ -27,6 +27,7 @@ Currently supported Scribus versions:
 | 1.7.0 |
 | 1.7.1 |
 | 1.7.2 |
+| 1.7.3 |
 
 > **Important:** Use the plugin that matches your Scribus version. Scribus 1.7.x is the development series leading toward Scribus 1.8.0.
 
@@ -71,13 +72,13 @@ The browser updates as you work, so you can use it as a simple visual checklist 
 
 ## Building
 
-The project builds against Scribus 1.7.x in Docker using Ubuntu 24.04 and Qt 6. The default local build target is Scribus 1.7.2.
+The project builds against Scribus 1.7.x in Docker using Ubuntu 24.04 and Qt 6. The default local build target is Scribus 1.7.3.
 
 ```bash
-SCRIBUS_VERSION=1.7.2 ./build-plugin.sh
+SCRIBUS_VERSION=1.7.3 ./build-plugin.sh
 ```
 
-CI builds the plugin against Scribus 1.7.0, 1.7.1, and 1.7.2.
+CI builds the plugin against Scribus 1.7.0, 1.7.1, 1.7.2, and 1.7.3.
 
 ## Contributions
 
