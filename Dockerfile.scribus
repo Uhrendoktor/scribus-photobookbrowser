@@ -1,8 +1,8 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SCRIBUS_VERSION
-ARG SCRIBUS_URL=https://downloads.sourceforge.net/project/scribus/scribus/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz
+ARG SCRIBUS_URL=https://downloads.sourceforge.net/project/scribus/scribus-devel/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz
 ARG BUILD_JOBS
 
 ENV TZ=UTC
@@ -12,7 +12,7 @@ ENV LC_ALL=C.UTF-8
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ------------------------------------------------------------
-# Base build environment
+# Scribus 1.7.x / Qt 6 build environment
 # ------------------------------------------------------------
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     pkg-config \
     ccache \
-    \
     extra-cmake-modules \
     gettext \
     \
@@ -57,11 +56,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev \
     libzmf-dev \
     \
-    libqt5opengl5-dev \
-    libqt5webkit5-dev \
-    qtbase5-dev \
-    qttools5-dev \
-    qttools5-dev-tools \
+    qt6-base-dev \
+    qt6-5compat-dev \
+    qt6-svg-dev \
+    qt6-tools-dev \
+    qt6-tools-dev-tools \
+    qt6-l10n-tools \
     \
     python3-dev \
     zlib1g-dev \
@@ -83,7 +83,7 @@ USER builder
 WORKDIR /workspace
 
 # ------------------------------------------------------------
-# Download Scribus
+# Download Scribus 1.7.x
 # ------------------------------------------------------------
 
 RUN wget \
@@ -96,11 +96,6 @@ RUN wget \
        /opt/scribus-source/scribus-${SCRIBUS_VERSION} \
        /opt/scribus-source/scribus \
     && rm /tmp/scribus-${SCRIBUS_VERSION}.tar.xz
-
-# For local development:
-# copy scribus from scribus-${SCRIBUS_VERSION} to /opt/scribus-source/scribus
-# COPY --chown=builder:builder scribus-${SCRIBUS_VERSION} \
-#     /opt/scribus-source/scribus
 
 # ------------------------------------------------------------
 # Configure
