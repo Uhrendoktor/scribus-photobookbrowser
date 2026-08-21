@@ -3,6 +3,9 @@ ARG VERSION
 
 FROM scribus-photobook-browser:scribus-${SCRIBUS_VERSION}
 
+ARG SCRIBUS_VERSION
+ARG VERSION
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 ENV TZ=UTC
@@ -90,4 +93,6 @@ RUN chmod +x /usr/local/bin/photobook-entrypoint
 
 USER builder
 
-ENTRYPOINT ["/usr/local/bin/photobook-entrypoint", "${SCRIBUS_VERSION}", "${VERSION}"]
+ENV VERSION=${VERSION}
+ENV SCRIBUS_VERSION=${SCRIBUS_VERSION}
+ENTRYPOINT ["/bin/sh", "-c", "exec /usr/local/bin/photobook-entrypoint \"${SCRIBUS_VERSION}\" \"${VERSION}\""]

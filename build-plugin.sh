@@ -20,7 +20,6 @@ docker build \
     "${SCRIPT_DIR}"
 
 echo
-echo "Running build container..."
 
 docker run \
     --rm \

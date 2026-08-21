@@ -1,9 +1,9 @@
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG SCRIBUS_VERSION=1.6.5
+ARG SCRIBUS_VERSION
 ARG SCRIBUS_URL=https://downloads.sourceforge.net/project/scribus/scribus/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz
-ARG BUILD_JOBS=4
+ARG BUILD_JOBS
 
 ENV TZ=UTC
 ENV LANG=C.UTF-8

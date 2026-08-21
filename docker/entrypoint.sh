@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-SCRIBUS_VERSION="${1}"
-PLUGIN_VERSION="${2}"
+SCRIBUS_VERSION=$1
+VERSION=$2
 
 INSTALL_ROOT="/opt/scribus-install"
 OUTPUT_ROOT="/workspace/dist"
@@ -13,6 +13,8 @@ mkdir -p "${OUTPUT_ROOT}"
 echo
 echo "=============================================="
 echo " Scribus PhotoBook Browser build"
+echo " Version: ${VERSION}"
+echo " Scribus: ${SCRIBUS_VERSION}"
 echo "=============================================="
 echo
 
@@ -40,7 +42,7 @@ fi
 
 ARCH="$(uname -m)"
 
-OUT="${OUTPUT_ROOT}/photobookbrowser-${PLUGIN_VERSION}-scribus-${SCRIBUS_VERSION}-linux-${ARCH}.so"
+OUT="${OUTPUT_ROOT}/photobookbrowser-${VERSION}-scribus-${SCRIBUS_VERSION}-linux-${ARCH}.so"
 
 cp "${PLUGIN}" "${OUT}"
 
