@@ -24,12 +24,14 @@ Currently supported Scribus versions:
 
 | Scribus |
 |---|
+| 1.6.5 |
+| 1.6.6 |
 | 1.7.0 |
 | 1.7.1 |
 | 1.7.2 |
 | 1.7.3 |
 
-> **Important:** Use the plugin that matches your Scribus version. Scribus 1.7.x is the development series leading toward Scribus 1.8.0.
+> **Important:** Use the plugin that matches your Scribus version. The plugin source is shared between the 1.6.x and 1.7.x builds; the build environment selects the corresponding Qt 5 or Qt 6 Scribus tree.
 
 ## Installation
 
@@ -72,13 +74,16 @@ The browser updates as you work, so you can use it as a simple visual checklist 
 
 ## Building
 
-The project builds against Scribus 1.7.x in Docker using Ubuntu 24.04 and Qt 6. The default local build target is Scribus 1.7.3.
+The project builds against both Scribus 1.6.x and 1.7.x in Docker. Scribus 1.6.x uses the legacy Ubuntu 22.04/Qt 5 environment, while Scribus 1.7.x uses Ubuntu 24.04/Qt 6.
 
 ```bash
 SCRIBUS_VERSION=1.7.3 ./build-plugin.sh
+SCRIBUS_VERSION=1.6.6 ./build-plugin.sh
 ```
 
-CI builds the plugin against Scribus 1.7.0, 1.7.1, 1.7.2, and 1.7.3.
+CI builds the plugin against Scribus 1.6.5, 1.6.6, 1.7.0, 1.7.1, 1.7.2, and 1.7.3.
+
+For branch/tag test runs, each successful build is also uploaded as a GitHub Actions artifact and can be downloaded from the workflow run for 14 days.
 
 ## Contributions
 
