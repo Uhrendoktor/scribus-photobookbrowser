@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scribus-version: [1.7.0, 1.7.1, 1.7.2]
+        scribus-version: [1.7.0, 1.7.1, 1.7.2, 1.7.3]
 
     permissions:
       contents: write
@@ -68,7 +68,7 @@ jobs:
           files: ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
 
       - name: Remove temporary test tag marker
-        if: matrix.scribus-version == '1.7.2'
+        if: matrix.scribus-version == '1.7.3'
         env:
           TEST_TAG: test-scribus-1.7x-20260821
         run: |
