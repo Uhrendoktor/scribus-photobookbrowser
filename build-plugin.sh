@@ -5,12 +5,12 @@ set -euo pipefail
 IMAGE="scribus-photobook-browser:plugin"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.6.5}"
+SCRIBUS_VERSION="${SCRIBUS_VERSION:-1.7.2}"
 VERSION="$(grep -oP 'about->version\s*=\s*QStringLiteral\("([^"]+)"\);' "${SCRIPT_DIR}/plugin/photobookbrowserplugin.cpp" | head -n 1 | cut -d '"' -f 2)"
 
 mkdir -p "${SCRIPT_DIR}/dist"
 
-echo "Building Docker image..."
+echo "Building PhotoBook Browser against Scribus ${SCRIBUS_VERSION}..."
 docker build \
     --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
     --build-arg "SCRIBUS_VERSION=${SCRIBUS_VERSION}" \
