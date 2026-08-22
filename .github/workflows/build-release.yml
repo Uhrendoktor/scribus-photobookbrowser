@@ -3,39 +3,77 @@ name: Build and Release
 on:
   push:
     tags:
-      - "*"
+      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plugin version identifier (for example 1.7.4-test)"
+        required: true
+        type: string
+
+concurrency:
+  group: photobookbrowser-build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     strategy:
+      fail-fast: false
       matrix:
-        scribus-version: [1.6.5, 1.6.6]
+        scribus-version: [1.6.5, 1.6.6, 1.7.0, 1.7.1, 1.7.2, 1.7.3]
 
     permissions:
       contents: write
+
+    env:
+      BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate version
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid tag version: $BUILD_VERSION"
+              echo "Release tags must use x.x.x, for example 1.7.4."
+              exit 1
+            fi
+          elif [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid manual version: $BUILD_VERSION"
+            echo "Expected x.x.x, optionally followed by a pre-release/test suffix."
+            exit 1
+          fi
+
       - name: Build Scribus
         run: |
           chmod +x ./build-scribus.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} ./build-scribus.sh
+          SCRIBUS_VERSION=${{ matrix.scribus-version }} BUILD_JOBS=4 ./build-scribus.sh
 
       - name: Build Plugin
         run: |
           chmod +x ./build-plugin.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION=${{ github.ref_name }} ./build-plugin.sh
+          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION=${BUILD_VERSION} BUILD_JOBS=4 ./build-plugin.sh
 
       - name: Verify exported artifact
         run: |
           ls -lah ./dist
-          test -f ./dist/photobookbrowser-${{ github.ref_name }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          test -f ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+
+      - name: Upload downloadable test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photobookbrowser-${{ matrix.scribus-version }}-${{ env.BUILD_VERSION }}
+          path: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload artifact to GitHub Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          files: ./dist/photobookbrowser-${{ github.ref_name }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
