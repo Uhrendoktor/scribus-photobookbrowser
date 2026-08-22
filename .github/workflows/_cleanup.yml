@@ -15,4 +15,6 @@ jobs:
     with:
       refs: ''
       cleanup_actions: true
+      issue_number: 2
+      cleanup_workflow: .github/workflows/_cleanup.yml
     secrets: inherit
