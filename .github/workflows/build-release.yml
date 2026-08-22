@@ -3,17 +3,17 @@ name: Build and Release
 on:
   push:
     branches:
-      - "port/scribus-1.7x-unified-docker-20260821"
+      - "main"
     tags:
       - "*"
 
 concurrency:
-  group: scribus-port-${{ github.ref }}
+  group: photobookbrowser-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/port/scribus-1.7x-unified-docker-20260821' || startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
