@@ -18,10 +18,9 @@ add_library(${SCRIBUS_PHOTOBOOKBROWSER_PLUGIN} MODULE
 	${PHOTOBOOKBROWSER_PLUGIN_SOURCES}
 )
 
-# Thumbnail decoding runs on QtConcurrent::run(); most Scribus 1.6.x trees
-# already pull in Concurrent for ${EXE_NAME}, but the explicit find/link
-# below keeps this plugin self-contained even if that changes. Safe to
-# drop if your top-level CMakeLists already exposes Qt::Concurrent.
+# Thumbnail decoding runs on QtConcurrent::run(). Scribus 1.6.x uses Qt 5,
+# while Scribus 1.7.x uses Qt 6. Select the Qt major version already used by
+# the Scribus build instead of hard-coding one series.
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Concurrent)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent)
 

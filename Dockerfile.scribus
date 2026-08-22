@@ -1,8 +1,9 @@
-FROM ubuntu:22.04
+ARG UBUNTU_VERSION=24.04
+FROM ubuntu:${UBUNTU_VERSION}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SCRIBUS_VERSION
-ARG SCRIBUS_URL=https://downloads.sourceforge.net/project/scribus/scribus/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz
+ARG SCRIBUS_URL
 ARG BUILD_JOBS
 
 ENV TZ=UTC
@@ -11,10 +12,9 @@ ENV LC_ALL=C.UTF-8
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# ------------------------------------------------------------
-# Base build environment
-# ------------------------------------------------------------
-
+# The build environments differ only where Scribus 1.6.x and 1.7.x
+# require different Ubuntu/Qt generations. Keep the common dependency
+# set here and select the Qt-specific packages below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -27,19 +27,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     pkg-config \
     ccache \
-    \
     extra-cmake-modules \
     gettext \
-    \
     libcairo2-dev \
     libcdr-dev \
     libcups2-dev \
+    libfontconfig1-dev \
     libfreehand-dev \
+    libfreetype6-dev \
     libgraphicsmagick++1-dev \
     libharfbuzz-dev \
     libhunspell-dev \
     libhyphen-dev \
     libicu-dev \
+    libjpeg-dev \
     liblcms2-dev \
     libmspub-dev \
     libopenscenegraph-dev \
@@ -56,81 +57,57 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwpg-dev \
     libxml2-dev \
     libzmf-dev \
-    \
-    libqt5opengl5-dev \
-    libqt5webkit5-dev \
-    qtbase5-dev \
-    qttools5-dev \
-    qttools5-dev-tools \
-    \
+    libboost-dev \
     python3-dev \
     zlib1g-dev \
+    && if [[ "${SCRIBUS_VERSION}" == 1.6.* ]]; then \
+         apt-get install -y --no-install-recommends \
+           libqt5opengl5-dev \
+           libqt5webkit5-dev \
+           qtbase5-dev \
+           qttools5-dev \
+           qttools5-dev-tools; \
+       else \
+         apt-get install -y --no-install-recommends \
+           qt6-base-dev \
+           qt6-base-private-dev \
+           qt6-5compat-dev \
+           qt6-svg-dev \
+           qt6-tools-dev \
+           qt6-tools-dev-tools \
+           qt6-l10n-tools; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
-# ------------------------------------------------------------
-# Build user
-# ------------------------------------------------------------
-
-RUN useradd \
-    --create-home \
-    --shell /bin/bash \
-    builder
-
-RUN mkdir -p /workspace /opt/scribus-source /opt/scribus-install \
+RUN useradd --create-home --shell /bin/bash builder \
+    && mkdir -p /workspace /opt/scribus-source /opt/scribus-install \
     && chown -R builder:builder /workspace /opt/scribus-source /opt/scribus-install
 
 USER builder
 WORKDIR /workspace
 
-# ------------------------------------------------------------
-# Download Scribus
-# ------------------------------------------------------------
-
-RUN wget \
-    --progress=bar:force:noscroll \
-    -O /tmp/scribus-${SCRIBUS_VERSION}.tar.xz \
-    "${SCRIBUS_URL}" \
-    && tar -xJf /tmp/scribus-${SCRIBUS_VERSION}.tar.xz \
-       -C /opt/scribus-source \
-    && mv \
-       /opt/scribus-source/scribus-${SCRIBUS_VERSION} \
-       /opt/scribus-source/scribus \
+RUN if [[ -z "${SCRIBUS_URL}" ]]; then \
+      if [[ "${SCRIBUS_VERSION}" == 1.6.* ]]; then \
+        SCRIBUS_URL="https://downloads.sourceforge.net/project/scribus/scribus/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz"; \
+      else \
+        SCRIBUS_URL="https://downloads.sourceforge.net/project/scribus/scribus-devel/${SCRIBUS_VERSION}/scribus-${SCRIBUS_VERSION}.tar.xz"; \
+      fi; \
+    fi \
+    && wget --progress=bar:force:noscroll \
+      -O /tmp/scribus-${SCRIBUS_VERSION}.tar.xz "${SCRIBUS_URL}" \
+    && tar -xJf /tmp/scribus-${SCRIBUS_VERSION}.tar.xz -C /opt/scribus-source \
+    && mv /opt/scribus-source/scribus-${SCRIBUS_VERSION} /opt/scribus-source/scribus \
     && rm /tmp/scribus-${SCRIBUS_VERSION}.tar.xz
-
-# For local development:
-# copy scribus from scribus-${SCRIBUS_VERSION} to /opt/scribus-source/scribus
-# COPY --chown=builder:builder scribus-${SCRIBUS_VERSION} \
-#     /opt/scribus-source/scribus
-
-# ------------------------------------------------------------
-# Configure
-# ------------------------------------------------------------
 
 WORKDIR /opt/scribus-source/scribus
 
-RUN cmake \
-    -S . \
-    -B build \
+RUN cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/opt/scribus-install \
     -DWANT_PCH=OFF \
     -DCMAKE_CXX_FLAGS="-O2 -g"
 
-# ------------------------------------------------------------
-# Build
-# ------------------------------------------------------------
-
-RUN cmake \
-    --build build \
-    --parallel ${BUILD_JOBS}
-
-# ------------------------------------------------------------
-# Install Scribus + plugin into staging directory
-# ------------------------------------------------------------
-
-RUN cmake \
-    --install build
-
-USER root
+RUN cmake --build build --parallel ${BUILD_JOBS}
+RUN cmake --install build
 
 USER builder

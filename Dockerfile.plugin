@@ -1,12 +1,12 @@
 ARG SCRIBUS_VERSION
 ARG VERSION
+ARG BUILD_JOBS
 
 FROM scribus-photobook-browser:scribus-${SCRIBUS_VERSION}
 
 ARG SCRIBUS_VERSION
 ARG VERSION
-
-ARG DEBIAN_FRONTEND=noninteractive
+ARG BUILD_JOBS
 
 ENV TZ=UTC
 ENV LANG=C.UTF-8
@@ -14,16 +14,8 @@ ENV LC_ALL=C.UTF-8
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# ------------------------------------------------------------
-# Copy plugin into Scribus source tree
-# ------------------------------------------------------------
-
 COPY --chown=builder:builder plugin \
     /opt/scribus-source/scribus/scribus/plugins/photobookbrowser
-
-# ------------------------------------------------------------
-# Enable plugin in Scribus's plugin CMake file
-# ------------------------------------------------------------
 
 RUN grep -q 'add_subdirectory(picbrowser)' \
         /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt \
@@ -39,10 +31,6 @@ RUN if grep -q 'add_subdirectory(picbrowser)' \
         /opt/scribus-source/scribus/scribus/plugins/CMakeLists.txt; \
     fi
 
-# ------------------------------------------------------------
-# Configure
-# ------------------------------------------------------------
-
 WORKDIR /opt/scribus-source/scribus
 
 RUN cmake \
@@ -53,25 +41,12 @@ RUN cmake \
     -DWANT_PCH=OFF \
     -DCMAKE_CXX_FLAGS="-O2 -g"
 
-# ------------------------------------------------------------
-# Build
-# ------------------------------------------------------------
-
 RUN cmake \
     --build build \
     --target photobookbrowser \
     --parallel ${BUILD_JOBS}
 
-# ------------------------------------------------------------
-# Install Scribus + plugin into staging directory
-# ------------------------------------------------------------
-
-RUN cmake \
-    --install build
-
-# ------------------------------------------------------------
-# Verify plugin was actually produced
-# ------------------------------------------------------------
+RUN cmake --install build
 
 RUN find /opt/scribus-install \
         -type f \
@@ -80,17 +55,11 @@ RUN find /opt/scribus-install \
     | tee /tmp/plugin-files.txt \
     && test -s /tmp/plugin-files.txt
 
-# ------------------------------------------------------------
-# Runtime entrypoint
-# ------------------------------------------------------------
-
 COPY --chown=builder:builder docker/entrypoint.sh \
     /usr/local/bin/photobook-entrypoint
 
 USER root
-
 RUN chmod +x /usr/local/bin/photobook-entrypoint
-
 USER builder
 
 ENV VERSION=${VERSION}
