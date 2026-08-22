@@ -10,14 +10,9 @@ on:
         description: "Plugin version identifier (for example 1.7.4-test)"
         required: true
         type: string
-      ref:
-        description: "Git ref to build (branch, tag, or commit)"
-        required: true
-        default: "port/scribus-1.7.x"
-        type: string
 
 concurrency:
-  group: photobookbrowser-build-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}-${{ github.run_id }}
+  group: photobookbrowser-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,13 +30,10 @@ jobs:
 
     env:
       BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-      BUILD_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
     steps:
-      - name: Checkout requested ref
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BUILD_REF }}
 
       - name: Validate version
         run: |
