@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       version:
@@ -35,11 +35,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate manual version
-        if: github.event_name == 'workflow_dispatch'
+      - name: Validate version
         run: |
-          if [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version: $BUILD_VERSION"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid tag version: $BUILD_VERSION"
+              echo "Release tags must use x.x.x, for example 1.7.4."
+              exit 1
+            fi
+          elif [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid manual version: $BUILD_VERSION"
             echo "Expected x.x.x, optionally followed by a pre-release/test suffix."
             exit 1
           fi
@@ -68,7 +73,7 @@ jobs:
           retention-days: 14
 
       - name: Upload artifact to GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
