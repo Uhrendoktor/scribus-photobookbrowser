@@ -1,0 +1,18 @@
+name: Temporary cleanup
+
+on:
+  push:
+    paths:
+      - '.github/workflows/_cleanup.yml'
+
+jobs:
+  cleanup:
+    permissions:
+      contents: write
+      actions: write
+      issues: write
+    uses: Uhrendoktor/GPT-ToolsAndStorage/.github/workflows/tool-ref-cleanup.yml@main
+    with:
+      refs: ''
+      cleanup_actions: true
+    secrets: inherit
