@@ -58,7 +58,13 @@ void PhotoBookBrowserDelegate::paint(QPainter* painter, const QStyleOptionViewIt
 
     if (!icon.isNull())
     {
-        const QPixmap pm = icon.pixmap(thumb);
+        // Do not use QIcon::pixmap(thumb) here. On Qt 6, the icon engine can
+        // choose a square mode for portrait images, making them extend
+        // beyond the intended aspect-ratio-preserving thumbnail area.
+        // Render into the actual thumbnail rectangle explicitly instead.
+        const QPixmap source = icon.pixmap(icon.actualSize(QSize(10000, 10000)));
+        const QPixmap pm = source.scaled(thumbRect.size(), Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation);
         const QRect target(thumbRect.left() + (thumbRect.width() - pm.width()) / 2,
                             thumbRect.top() + (thumbRect.height() - pm.height()) / 2,
                             pm.width(), pm.height());
