@@ -18,9 +18,9 @@ Browse your photos directly in Scribus, see which ones you have already used, an
 
 [**Download the latest release →**](https://github.com/Uhrendoktor/scribus-photobookbrowser/releases)
 
-Choose the download that matches your **Scribus version**.
+Choose the download that matches your **Scribus version**. The plugin source is shared between Scribus 1.6.x and 1.7.x; the release builds use the matching Scribus/Qt environment for each version.
 
-Currently supported Scribus versions:
+### Supported Scribus versions
 
 | Scribus |
 |---|
@@ -31,7 +31,7 @@ Currently supported Scribus versions:
 | 1.7.2 |
 | 1.7.3 |
 
-> **Important:** Use the plugin that matches your Scribus version. The plugin source is shared between the 1.6.x and 1.7.x builds; the build environment selects the corresponding Qt 5 or Qt 6 Scribus tree.
+The 1.6.x builds use Qt 5 and the 1.7.x builds use Qt 6. These are separate binaries because Scribus plugins must be built against the corresponding Scribus/Qt ABI, but the PhotoBook Browser plugin implementation itself is shared.
 
 ## Installation
 
@@ -74,16 +74,14 @@ The browser updates as you work, so you can use it as a simple visual checklist 
 
 ## Building
 
-The project builds against both Scribus 1.6.x and 1.7.x in Docker. Scribus 1.6.x uses the legacy Ubuntu 22.04/Qt 5 environment, while Scribus 1.7.x uses Ubuntu 24.04/Qt 6.
+The project builds against both Scribus 1.6.x and 1.7.x in Docker. Scribus 1.6.x uses the Ubuntu 22.04/Qt 5 environment, while Scribus 1.7.x uses Ubuntu 24.04/Qt 6. The common Docker setup and plugin build are shared; only the Scribus/Qt-specific dependencies and source distribution differ.
 
 ```bash
 SCRIBUS_VERSION=1.7.3 ./build-plugin.sh
 SCRIBUS_VERSION=1.6.6 ./build-plugin.sh
 ```
 
-CI builds the plugin against Scribus 1.6.5, 1.6.6, 1.7.0, 1.7.1, 1.7.2, and 1.7.3.
-
-For branch/tag test runs, each successful build is also uploaded as a GitHub Actions artifact and can be downloaded from the workflow run for 14 days.
+CI builds the plugin against Scribus 1.6.5, 1.6.6, 1.7.0, 1.7.1, 1.7.2, and 1.7.3. Successful builds from test runs are uploaded as GitHub Actions artifacts for 14 days; release tags additionally publish the binaries to the GitHub release.
 
 ## Contributions
 
