@@ -2,12 +2,15 @@ name: Build and Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "*.*.*"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: "Plugin version identifier (for example 1.7.4-test)"
+        description: "Plugin version identifier (for example 0.1.2-test)"
         required: true
         type: string
 
@@ -16,36 +19,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-linux:
+    name: Linux / Scribus ${{ matrix.scribus-version }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-
-    strategy:
-      fail-fast: false
-      matrix:
-        scribus-version: [1.6.5, 1.6.6, 1.7.0, 1.7.1, 1.7.2, 1.7.3]
-
+    timeout-minutes: 120
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        scribus-version:
+          - "1.6.5"
+          - "1.6.6"
+          - "1.6.7"
+          - "1.7.0"
+          - "1.7.1"
+          - "1.7.2"
+          - "1.7.3"
+          - "1.7.4"
 
     env:
-      BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+      BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || format('0.0.0-ci.{0}', github.run_number) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Validate version
+        shell: bash
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
             if [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Invalid tag version: $BUILD_VERSION"
-              echo "Release tags must use x.x.x, for example 1.7.4."
+              echo "Invalid release tag version: $BUILD_VERSION"
               exit 1
             fi
           elif [[ ! "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid manual version: $BUILD_VERSION"
-            echo "Expected x.x.x, optionally followed by a pre-release/test suffix."
+            echo "Invalid CI version: $BUILD_VERSION"
             exit 1
           fi
 
@@ -54,26 +64,227 @@ jobs:
           chmod +x ./build-scribus.sh
           SCRIBUS_VERSION=${{ matrix.scribus-version }} BUILD_JOBS=4 ./build-scribus.sh
 
-      - name: Build Plugin
+      - name: Build PhotoBook Browser
         run: |
           chmod +x ./build-plugin.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION=${BUILD_VERSION} BUILD_JOBS=4 ./build-plugin.sh
+          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION="$BUILD_VERSION" BUILD_JOBS=4 ./build-plugin.sh
 
-      - name: Verify exported artifact
+      - name: Verify Linux plugin
         run: |
           ls -lah ./dist
-          test -f ./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+          test -f "./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so"
 
-      - name: Upload downloadable test artifact
+      - name: Upload Linux CI build
         uses: actions/upload-artifact@v4
         with:
-          name: photobookbrowser-${{ matrix.scribus-version }}-${{ env.BUILD_VERSION }}
+          name: photobookbrowser-linux-${{ matrix.scribus-version }}-${{ env.BUILD_VERSION }}
           path: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload artifact to GitHub Release
-        if: github.event_name == 'push'
+      - name: Publish Linux plugin to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
+
+  build-macos:
+    name: macOS / Scribus 1.7.4
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install cmake ninja pkgconf qt freetype cairo harfbuzz icu4c \
+            jpeg-turbo libpng libtiff libxml2 little-cms2 poppler fontconfig \
+            hunspell cups
+
+      - name: Download and prepare Scribus 1.7.4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=1.7.4
+          ARCHIVE="$RUNNER_TEMP/scribus-${VERSION}.tar.xz"
+          curl -fL --retry 3 \
+            "https://downloads.sourceforge.net/project/scribus/scribus-devel/${VERSION}/scribus-${VERSION}.tar.xz" \
+            -o "$ARCHIVE"
+          tar -xJf "$ARCHIVE" -C "$RUNNER_TEMP"
+          SCRIBUS_SRC="$RUNNER_TEMP/scribus-${VERSION}"
+          test -f "$SCRIBUS_SRC/CMakeLists.txt"
+          mkdir -p "$SCRIBUS_SRC/scribus/plugins/photobookbrowser"
+          cp -R "$GITHUB_WORKSPACE/plugin/." "$SCRIBUS_SRC/scribus/plugins/photobookbrowser/"
+          python3 - "$SCRIBUS_SRC/scribus/plugins/CMakeLists.txt" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          if not re.search(r"add_subdirectory\s*\(\s*photobookbrowser\s*\)", source, re.I):
+              source, count = re.subn(
+                  r"(^[ \t]*add_subdirectory\s*\(\s*picbrowser\s*\)[ \t]*$)",
+                  r"\1\nadd_subdirectory(photobookbrowser)",
+                  source,
+                  count=1,
+                  flags=re.I | re.M,
+              )
+              if count != 1:
+                  raise SystemExit("Could not locate Scribus' picbrowser CMake entry")
+              path.write_text(source, encoding="utf-8")
+          PY
+
+      - name: Configure and build plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX="$(brew --prefix)"
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/opt/icu4c/lib/pkgconfig:$PREFIX/opt/qt/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cmake -S "$RUNNER_TEMP/scribus-1.7.4" -B "$RUNNER_TEMP/scribus-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/scribus-install" \
+            -DQT_PREFIX="$PREFIX" \
+            -DCMAKE_INCLUDE_PATH="$PREFIX/include" \
+            -DCMAKE_LIBRARY_PATH="$PREFIX/lib" \
+            -DWANT_PCH=OFF \
+            -DWANT_NOOSG=ON \
+            -DWANT_GRAPHICSMAGICK=OFF \
+            -DWITH_PODOFO=OFF \
+            -DWITH_BOOST=OFF
+          cmake --build "$RUNNER_TEMP/scribus-build" --target photobookbrowser --parallel 3
+          PLUGIN="$(find "$RUNNER_TEMP/scribus-build" -type f \( -iname '*photobookbrowser*.dylib' -o -iname '*photobookbrowser*.so' \) -print -quit)"
+          test -n "$PLUGIN"
+          file "$PLUGIN"
+          mkdir -p "$RUNNER_TEMP/dist"
+          EXT="${PLUGIN##*.}"
+          cp "$PLUGIN" "$RUNNER_TEMP/dist/photobookbrowser-0.1.0-scribus-1.7.4-macos-$(uname -m).${EXT}"
+
+      - name: Upload macOS compile check
+        uses: actions/upload-artifact@v4
+        with:
+          name: photobookbrowser-macos-scribus-1.7.4
+          path: ${{ runner.temp }}/dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows-mingw:
+    name: Windows / Scribus MSYS2 MinGW
+    runs-on: windows-2022
+    timeout-minutes: 240
+    steps:
+      - name: Checkout PhotoBook Browser
+        uses: actions/checkout@v4
+
+      - name: Checkout MSYS2 Scribus package recipe
+        uses: actions/checkout@v4
+        with:
+          repository: msys2/MINGW-packages
+          ref: master
+          path: .deps/MINGW-packages
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            python
+
+      - name: Build Scribus and PhotoBook Browser with MinGW
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(cygpath -u "$GITHUB_WORKSPACE")"
+          PACKAGE_DIR="$WORKSPACE/.deps/MINGW-packages/mingw-w64-scribus"
+          PLUGIN_STAGE="$(mktemp -d)"
+          mkdir -p "$PLUGIN_STAGE/photobookbrowser"
+          cp -R "$WORKSPACE/plugin/." "$PLUGIN_STAGE/photobookbrowser/"
+          tar -czf "$PACKAGE_DIR/photobookbrowser.tar.gz" -C "$PLUGIN_STAGE" photobookbrowser
+
+          python - "$PACKAGE_DIR/PKGBUILD" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          if "photobookbrowser.tar.gz" not in source:
+              source, source_count = re.subn(
+                  r"source=\(\s*",
+                  "source=(\n  'photobookbrowser.tar.gz'\n  ",
+                  source,
+                  count=1,
+              )
+              if source_count != 1:
+                  raise SystemExit("Could not add the local plugin archive to PKGBUILD")
+              source, checksum_count = re.subn(
+                  r"sha256sums=\(",
+                  "sha256sums=('SKIP' ",
+                  source,
+                  count=1,
+              )
+              if checksum_count != 1:
+                  raise SystemExit("Could not add the matching checksum entry to PKGBUILD")
+
+              marker = "\nbuild() {"
+              if marker not in source:
+                  raise SystemExit("Could not locate the PKGBUILD build() function")
+              before_build, build_section = source.split(marker, 1)
+              close = before_build.rfind("}")
+              if close < 0:
+                  raise SystemExit("Could not locate the end of PKGBUILD prepare()")
+              integration = r'''
+                mkdir -p "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
+                tar -xzf "${srcdir}/photobookbrowser.tar.gz" -C "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
+                python - "${srcdir}/${_realname}-${pkgver}/scribus/plugins/CMakeLists.txt" <<'PLUGIN_CMAKE'
+          from pathlib import Path
+          import re
+          import sys
+
+          cmake_file = Path(sys.argv[1])
+          content = cmake_file.read_text(encoding="utf-8")
+          if not re.search(r"add_subdirectory\s*\(\s*photobookbrowser\s*\)", content, re.I):
+              content, count = re.subn(
+                  r"(^[ \t]*add_subdirectory\s*\(\s*picbrowser\s*\)[ \t]*$)",
+                  r"\1\nadd_subdirectory(photobookbrowser)",
+                  content,
+                  count=1,
+                  flags=re.I | re.M,
+              )
+              if count != 1:
+                  raise SystemExit("Could not locate Scribus' picbrowser CMake entry")
+              cmake_file.write_text(content, encoding="utf-8")
+          PLUGIN_CMAKE
+          '''
+              source = before_build[:close] + integration + before_build[close:] + marker + build_section
+
+          path.write_text(source, encoding="utf-8")
+          PY
+
+          cd "$PACKAGE_DIR"
+          export MINGW_ARCH=ucrt64
+          makepkg-mingw -sLf --noconfirm
+
+          SCRIBUS_VERSION="$(sed -n 's/^pkgver=//p' PKGBUILD | head -n 1)"
+          PLUGIN="$(find "$PACKAGE_DIR/pkg" -type f -iname '*photobookbrowser*.dll' -print -quit)"
+          if [[ -z "$PLUGIN" ]]; then
+            echo "PhotoBook Browser DLL was not found in the packaged Scribus build."
+            find "$PACKAGE_DIR/pkg" -type f | grep -Ei 'photobook|scribus' | head -n 50 || true
+            exit 1
+          fi
+          mkdir -p "$WORKSPACE/dist"
+          cp "$PLUGIN" "$WORKSPACE/dist/photobookbrowser-ci-scribus-${SCRIBUS_VERSION}-windows-ucrt64.dll"
+          file "$WORKSPACE/dist/"*.dll
+
+      - name: Upload Windows MinGW compile check
+        uses: actions/upload-artifact@v4
+        with:
+          name: photobookbrowser-windows-mingw
+          path: dist/*.dll
+          if-no-files-found: error
+          retention-days: 14

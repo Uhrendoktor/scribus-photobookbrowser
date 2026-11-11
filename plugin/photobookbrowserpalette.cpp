@@ -22,10 +22,11 @@
 #include <QListView>
 #include <QMenu>
 #include <QMessageBox>
-#include <QProcess>
+#include <QDesktopServices>
 #include <QPushButton>
 #include <QSettings>
 #include <QTimer>
+#include <QUrl>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QVector>
@@ -379,7 +380,7 @@ void PhotoBookBrowserPalette::contextMenu(const QPoint& pos)
     else if (chosen == replace)
         insertImage(path, true);
     else if (chosen == reveal)
-        QProcess::startDetached(QStringLiteral("xdg-open"), {QFileInfo(path).absolutePath()});
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
 }
 
 void PhotoBookBrowserPalette::updateSummary()
