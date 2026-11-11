@@ -148,6 +148,7 @@ jobs:
           from pathlib import Path
           import re
           import sys
+          import textwrap
 
           path = Path(sys.argv[1])
           source = path.read_text(encoding="utf-8")
@@ -267,7 +268,7 @@ jobs:
               close = before_build.rfind("}")
               if close < 0:
                   raise SystemExit("Could not locate the end of PKGBUILD prepare()")
-              integration = r'''
+              integration = textwrap.dedent(r'''
                 mkdir -p "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
                 tar -xzf "${srcdir}/photobookbrowser.tar.gz" -C "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
                 python - "${srcdir}/${_realname}-${pkgver}/scribus/plugins/CMakeLists.txt" <<'PLUGIN_CMAKE'
@@ -289,7 +290,7 @@ jobs:
                   raise SystemExit("Could not locate Scribus' picbrowser CMake entry")
               cmake_file.write_text(content, encoding="utf-8")
           PLUGIN_CMAKE
-          '''
+          ''')
               source = before_build[:close] + integration + before_build[close:] + marker + build_section
 
           # Build only the plugin target rather than every Scribus application,
