@@ -47,23 +47,31 @@ jobs:
   build-linux:
     needs: cancel-stale
     name: Linux / Scribus ${{ matrix.scribus-version }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
     permissions:
       contents: write
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        scribus-version:
-          - "1.6.5"
-          - "1.6.6"
-          - "1.6.7"
-          - "1.7.0"
-          - "1.7.1"
-          - "1.7.2"
-          - "1.7.3"
-          - "1.7.4"
+        include:
+          - scribus-version: "1.6.5"
+            runner: ubuntu-22.04
+          - scribus-version: "1.6.6"
+            runner: ubuntu-22.04
+          - scribus-version: "1.6.7"
+            runner: ubuntu-22.04
+          - scribus-version: "1.7.0"
+            runner: ubuntu-24.04
+          - scribus-version: "1.7.1"
+            runner: ubuntu-24.04
+          - scribus-version: "1.7.2"
+            runner: ubuntu-24.04
+          - scribus-version: "1.7.3"
+            runner: ubuntu-24.04
+          - scribus-version: "1.7.4"
+            runner: ubuntu-24.04
 
     env:
       BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || format('0.0.0-ci.{0}', github.run_number) }}
@@ -85,25 +93,87 @@ jobs:
             exit 1
           fi
 
-      - name: Configure BuildKit host networking
+      - name: Install Scribus build dependencies
+        shell: bash
         run: |
-          docker buildx create \
-            --name photobookbrowser-hostnet \
-            --driver docker-container \
-            --driver-opt network=host \
-            --buildkitd-flags '--allow-insecure-entitlement network.host' \
-            --use
-          docker buildx inspect --bootstrap
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake git wget curl bzip2 xz-utils file \
+            pkg-config ccache extra-cmake-modules gettext \
+            libcairo2-dev libcdr-dev libcups2-dev libfontconfig1-dev libfreehand-dev \
+            libfreetype6-dev libgraphicsmagick++1-dev libharfbuzz-dev libhunspell-dev \
+            libhyphen-dev libicu-dev libjpeg-dev liblcms2-dev libmspub-dev \
+            libopenscenegraph-dev libpagemaker-dev libpng-dev libpodofo-dev \
+            libpoppler-cpp-dev libpoppler-dev libpoppler-private-dev libqxp-dev \
+            librevenge-dev libtiff-dev libvisio-dev libwpg-dev libxml2-dev libzmf-dev \
+            libboost-dev python3-dev zlib1g-dev
+          if [[ "${{ matrix.scribus-version }}" == 1.6.* ]]; then
+            sudo apt-get install -y --no-install-recommends \
+              libqt5opengl5-dev libqt5webkit5-dev qtbase5-dev qttools5-dev qttools5-dev-tools
+          else
+            sudo apt-get install -y --no-install-recommends \
+              qt6-base-dev qt6-base-private-dev qt6-5compat-dev qt6-svg-dev \
+              qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools
+          fi
 
-      - name: Build Scribus
+      - name: Download Scribus source and integrate PhotoBook Browser
+        shell: bash
         run: |
-          chmod +x ./build-scribus.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} BUILD_JOBS=4 ./build-scribus.sh
+          set -euo pipefail
+          VERSION="${{ matrix.scribus-version }}"
+          if [[ "$VERSION" == 1.6.* ]]; then
+            SERIES="scribus"
+          else
+            SERIES="scribus-devel"
+          fi
+          ARCHIVE="$RUNNER_TEMP/scribus-$VERSION.tar.xz"
+          curl -fL --retry 4 \
+            "https://downloads.sourceforge.net/project/scribus/$SERIES/$VERSION/scribus-$VERSION.tar.xz" \
+            -o "$ARCHIVE"
+          tar -xJf "$ARCHIVE" -C "$RUNNER_TEMP"
+          SCRIBUS_SRC="$RUNNER_TEMP/scribus-$VERSION"
+          test -f "$SCRIBUS_SRC/CMakeLists.txt"
+          mkdir -p "$SCRIBUS_SRC/scribus/plugins/photobookbrowser"
+          cp -R "$GITHUB_WORKSPACE/plugin/." "$SCRIBUS_SRC/scribus/plugins/photobookbrowser/"
+          python3 - "$SCRIBUS_SRC/scribus/plugins/CMakeLists.txt" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
 
-      - name: Build PhotoBook Browser
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          if not re.search(r"add_subdirectory\s*\(\s*photobookbrowser\s*\)", source, re.I):
+              source, count = re.subn(
+                  r"(^[ \t]*add_subdirectory\s*\(\s*picbrowser\s*\)[ \t]*$)",
+                  r"\1\nadd_subdirectory(photobookbrowser)",
+                  source,
+                  count=1,
+                  flags=re.I | re.M,
+              )
+              if count != 1:
+                  raise SystemExit("Could not locate Scribus' picbrowser CMake entry")
+              path.write_text(source, encoding="utf-8")
+          PY
+
+      - name: Configure and compile PhotoBook Browser
+        shell: bash
         run: |
-          chmod +x ./build-plugin.sh
-          SCRIBUS_VERSION=${{ matrix.scribus-version }} VERSION="$BUILD_VERSION" BUILD_JOBS=4 ./build-plugin.sh
+          set -euo pipefail
+          VERSION="${{ matrix.scribus-version }}"
+          SCRIBUS_SRC="$RUNNER_TEMP/scribus-$VERSION"
+          BUILD_DIR="$RUNNER_TEMP/scribus-build"
+          cmake -S "$SCRIBUS_SRC" -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/scribus-install" \
+            -DWANT_PCH=OFF \
+            -DCMAKE_CXX_FLAGS="-O2 -g"
+          cmake --build "$BUILD_DIR" --target photobookbrowser --parallel 4
+          PLUGIN="$(find "$BUILD_DIR" -type f -name '*photobookbrowser*.so' -print -quit)"
+          test -n "$PLUGIN"
+          file "$PLUGIN"
+          mkdir -p ./dist
+          cp "$PLUGIN" "./dist/photobookbrowser-$BUILD_VERSION-scribus-$VERSION-linux-x86_64.so"
 
       - name: Verify Linux plugin
         run: |

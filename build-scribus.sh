@@ -16,7 +16,7 @@ esac
 mkdir -p "${SCRIPT_DIR}/dist"
 
 echo "Building Scribus ${SCRIBUS_VERSION} Docker image (Ubuntu ${UBUNTU_VERSION})..."
-docker buildx build --allow network.host --network=host --load \
+docker build \
     --build-arg "UBUNTU_VERSION=${UBUNTU_VERSION}" \
     --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
     --build-arg "SCRIBUS_VERSION=${SCRIBUS_VERSION}" \
