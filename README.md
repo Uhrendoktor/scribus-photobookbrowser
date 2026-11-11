@@ -36,13 +36,13 @@ Supported image formats include JPEG, PNG, TIFF, WebP, BMP, GIF and JPEG 2000 (d
 
 [**Download the latest release →**](https://github.com/Uhrendoktor/scribus-photobookbrowser/releases)
 
-The published release binaries are currently for **Linux x86-64**. Choose the file matching the exact Scribus version shown in **Help → About Scribus**. Scribus plugins are tied to the Scribus and Qt ABI they were built against; a plugin built for one Scribus release is not necessarily compatible with another.
+The published release binaries are currently for **Linux x86-64**. The latest existing release may not yet contain the newly added Scribus 1.6.7 and 1.7.4 builds; those become downloadable from Releases after the next tagged build completes. Choose the file matching the exact Scribus version shown in **Help → About Scribus**. Scribus plugins are tied to the Scribus and Qt ABI they were built against; a plugin built for one Scribus release is not necessarily compatible with another.
 
 ### Build and compatibility status
 
 | Platform | Scribus version(s) built in CI | Binary availability |
 |---|---|---|
-| Linux x86-64 | 1.6.5, 1.6.6, 1.6.7, 1.7.0, 1.7.1, 1.7.2, 1.7.3, 1.7.4 | Release downloads |
+| Linux x86-64 | 1.6.5, 1.6.6, 1.6.7, 1.7.0, 1.7.1, 1.7.2, 1.7.3, 1.7.4 | CI artifacts; included in the next tagged release |
 | macOS | 1.7.4 (Qt 6) | CI compile check; no end-user release package yet |
 | Windows | 1.6.6 (MSYS2 UCRT64 / MinGW) | CI compile check only; **not compatible with the official MSVC Scribus installer** |
 

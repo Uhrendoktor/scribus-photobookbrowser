@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate version
         shell: bash
@@ -75,7 +75,7 @@ jobs:
           test -f "./dist/photobookbrowser-${BUILD_VERSION}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so"
 
       - name: Upload Linux CI build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: photobookbrowser-linux-${{ matrix.scribus-version }}-${{ env.BUILD_VERSION }}
           path: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
@@ -84,7 +84,7 @@ jobs:
 
       - name: Publish Linux plugin to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.4
         with:
           files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
 
@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install build dependencies
         run: |
@@ -142,11 +142,12 @@ jobs:
         run: |
           set -euo pipefail
           PREFIX="$(brew --prefix)"
+          QT_PREFIX="$(brew --prefix qt)"
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/opt/icu4c/lib/pkgconfig:$PREFIX/opt/qt/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
           cmake -S "$RUNNER_TEMP/scribus-1.7.4" -B "$RUNNER_TEMP/scribus-build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/scribus-install" \
-            -DQT_PREFIX="$PREFIX" \
+            -DQT_PREFIX="$QT_PREFIX" \
             -DCMAKE_INCLUDE_PATH="$PREFIX/include" \
             -DCMAKE_LIBRARY_PATH="$PREFIX/lib" \
             -DWANT_PCH=OFF \
@@ -163,7 +164,7 @@ jobs:
           cp "$PLUGIN" "$RUNNER_TEMP/dist/photobookbrowser-0.1.0-scribus-1.7.4-macos-$(uname -m).${EXT}"
 
       - name: Upload macOS compile check
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: photobookbrowser-macos-scribus-1.7.4
           path: ${{ runner.temp }}/dist/*
@@ -176,10 +177,10 @@ jobs:
     timeout-minutes: 240
     steps:
       - name: Checkout PhotoBook Browser
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout MSYS2 Scribus package recipe
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: msys2/MINGW-packages
           ref: master
@@ -282,7 +283,7 @@ jobs:
           file "$WORKSPACE/dist/"*.dll
 
       - name: Upload Windows MinGW compile check
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: photobookbrowser-windows-mingw
           path: dist/*.dll
