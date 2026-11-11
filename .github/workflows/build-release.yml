@@ -15,11 +15,37 @@ on:
         type: string
 
 concurrency:
-  group: photobookbrowser-build-${{ github.ref }}
+  group: photobookbrowser-build-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  cancel-stale:
+    name: Cancel superseded CI runs
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Cancel older runs on this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          stale_runs="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow build-release.yml \
+            --branch "$GITHUB_REF_NAME" \
+            --limit 50 \
+            --json databaseId,headSha,status \
+            --jq ".[] | select(.headSha != \"$GITHUB_SHA\" and .status != \"completed\") | .databaseId")"
+          while IFS= read -r run_id; do
+            [[ -z "$run_id" ]] && continue
+            echo "Cancelling superseded workflow run $run_id"
+            gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
+          done <<< "$stale_runs"
+
   build-linux:
+    needs: cancel-stale
     name: Linux / Scribus ${{ matrix.scribus-version }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -89,6 +115,7 @@ jobs:
           files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
 
   build-macos:
+    needs: cancel-stale
     name: macOS / Scribus 1.7.4
     runs-on: macos-15
     timeout-minutes: 180
@@ -172,6 +199,7 @@ jobs:
           retention-days: 14
 
   build-windows-mingw:
+    needs: cancel-stale
     name: Windows / Scribus MSYS2 MinGW
     runs-on: windows-2022
     timeout-minutes: 240
