@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: photobookbrowser-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-linux:
@@ -264,6 +264,25 @@ jobs:
           '''
               source = before_build[:close] + integration + before_build[close:] + marker + build_section
 
+          # Build only the plugin target rather than every Scribus application,
+          # document and bundled plugin target. This is a compile/ABI check.
+          source = source.replace(
+              "cmake --build build-${MSYSTEM}",
+              "cmake --build build-${MSYSTEM} --target photobookbrowser --parallel 4",
+          )
+          package_marker = "package() {"
+          if package_marker not in source:
+              raise SystemExit("Could not locate PKGBUILD package() function")
+          source = source.split(package_marker, 1)[0] + r'''package() {
+            local plugin
+            plugin="$(find "build-${MSYSTEM}" -type f -iname '*photobookbrowser*.dll' -print -quit)"
+            if [[ -z "$plugin" ]]; then
+              echo "PhotoBook Browser DLL was not produced by the build."
+              return 1
+            fi
+            install -Dm755 "$plugin" "$pkgdir${MINGW_PREFIX}/lib/scribus/plugins/photobookbrowser.dll"
+          }
+          '''
           path.write_text(source, encoding="utf-8")
           PY
 
