@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build-linux:
     name: Linux / Scribus ${{ matrix.scribus-version }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
       contents: write
@@ -90,7 +90,7 @@ jobs:
 
   build-macos:
     name: macOS / Scribus 1.7.4
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - name: Checkout

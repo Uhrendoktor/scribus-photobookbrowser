@@ -16,7 +16,7 @@ esac
 mkdir -p "${SCRIPT_DIR}/dist"
 
 echo "Building PhotoBook Browser against Scribus ${SCRIBUS_VERSION}..."
-docker build \
+docker build --network=host \
     --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
     --build-arg "SCRIBUS_VERSION=${SCRIBUS_VERSION}" \
     --build-arg "VERSION=${VERSION}" \
