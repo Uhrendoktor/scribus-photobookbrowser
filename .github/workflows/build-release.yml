@@ -85,6 +85,16 @@ jobs:
             exit 1
           fi
 
+      - name: Configure BuildKit host networking
+        run: |
+          docker buildx create \
+            --name photobookbrowser-hostnet \
+            --driver docker-container \
+            --driver-opt network=host \
+            --buildkitd-flags '--allow-insecure-entitlement network.host' \
+            --use
+          docker buildx inspect --bootstrap
+
       - name: Build Scribus
         run: |
           chmod +x ./build-scribus.sh
