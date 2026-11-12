@@ -36,7 +36,7 @@ Supported image formats include JPEG, PNG, TIFF, WebP, BMP, GIF and JPEG 2000 (d
 
 [**Download the latest release →**](https://github.com/Uhrendoktor/scribus-photobookbrowser/releases)
 
-The published release binaries are currently for **Linux x86-64**. The latest existing release may not yet contain the newly added Scribus 1.6.7 and 1.7.4 builds; those become downloadable from Releases after the next tagged build completes. Choose the file matching the exact Scribus version shown in **Help → About Scribus**. Scribus plugins are tied to the Scribus and Qt ABI they were built against; a plugin built for one Scribus release is not necessarily compatible with another.
+The currently published release binaries are for **Linux x86-64**. A Windows x64 MSVC build is being added and will be published only after its CI checks pass. The latest existing release may not yet contain the newly added Scribus 1.6.7 and 1.7.4 builds; those become downloadable from Releases after the next tagged build completes. Choose the file matching the exact Scribus version shown in **Help → About Scribus**. Scribus plugins are tied to the Scribus and Qt ABI they were built against; a plugin built for one Scribus release is not necessarily compatible with another.
 
 ### Build and compatibility status
 
@@ -44,11 +44,11 @@ The published release binaries are currently for **Linux x86-64**. The latest ex
 |---|---|---|
 | Linux x86-64 | 1.6.5, 1.6.6, 1.6.7, 1.7.0, 1.7.1, 1.7.2, 1.7.3, 1.7.4 | CI artifacts; included in the next tagged release |
 | macOS | 1.7.4 (Qt 6) | CI compile check; no end-user release package yet |
-| Windows x86-64 | 1.7.4 (MSVC 2022, Qt 6.11.3) | MSVC plugin DLL; CI artifact and next tagged release |
+| Windows x86-64 | 1.7.4 (MSVC 2022, Qt 6.11.3) | MSVC plugin build under CI validation; not yet a published release binary |
 
 The 1.6.x series uses Qt 5; the 1.7.x series uses Qt 6. The Linux release workflow builds each listed Scribus version separately.
 
-The Windows build uses Scribus' own Visual Studio 2022 plugin project as its template. CI builds the matching Scribus 1.7.4 host target to generate `scribus-api.lib`, then links PhotoBook Browser as a 64-bit MSVC Release DLL against that host import library and Qt 6.11.3. This is the Windows ABI expected by the standard MSVC Scribus 1.7.4 installation; it is not a MinGW build.
+The Windows build uses Scribus' own Visual Studio 2022 plugin project as its template. CI extracts the official Scribus 1.7.4 x64 installer, creates an MSVC import library from the exact `Scribus.exe` export table, and links PhotoBook Browser as a 64-bit MSVC Release DLL against it and Qt 6.11.3. The workflow checks the DLL architecture, host/Qt imports, and the three plugin entry points. This is the Windows ABI expected by the standard MSVC Scribus 1.7.4 installation; it is not a MinGW build.
 
 ## Installation (Linux)
 
@@ -82,7 +82,7 @@ Plugin locations can differ between distribution packages, AppImages and custom 
 
 The Windows build currently targets **Scribus 1.7.4 x86-64 (MSVC 2022)**.
 
-1. Download `photobookbrowser-…-scribus-1.7.4-windows-x64-msvc.dll` from the [latest release](https://github.com/Uhrendoktor/scribus-photobookbrowser/releases).
+After a successful tagged release publishes the Windows binary, download `photobookbrowser-…-scribus-1.7.4-windows-x64-msvc.dll` from the [latest release](https://github.com/Uhrendoktor/scribus-photobookbrowser/releases).
 2. Copy the DLL into the `plugins` directory of your Scribus 1.7.4 installation, alongside the other Scribus plugin DLLs.
 3. Restart Scribus and check **File → Preferences → Plugins** to confirm that PhotoBook Browser is loaded.
 
@@ -120,7 +120,7 @@ The resulting plugin is written to `dist/`.
 
 ## Continuous integration
 
-GitHub Actions builds Linux binaries for Scribus 1.6.5–1.6.7 and 1.7.0–1.7.4, runs a native macOS compile check against Scribus 1.7.4, and builds a 64-bit MSVC plugin for Scribus 1.7.4 on Windows. The Windows job uses the matching Scribus MSVC host import library and verifies the DLL's x64 architecture and imports from Scribus.exe and Qt 6 before uploading it.
+GitHub Actions builds Linux binaries for Scribus 1.6.5–1.6.7 and 1.7.0–1.7.4, runs a native macOS compile check against Scribus 1.7.4, and builds a 64-bit MSVC plugin for Scribus 1.7.4 on Windows. The Windows job extracts the matching official Scribus executable, builds its import library from exported symbols, and verifies the DLL's x64 architecture, Scribus/Qt imports, and plugin entry points.
 
 CI artifacts are retained for 14 days. Tagged releases publish the Linux binaries to the GitHub release.
 

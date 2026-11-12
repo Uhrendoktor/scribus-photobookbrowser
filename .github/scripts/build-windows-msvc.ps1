@@ -10,11 +10,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$ScribusLibsDate = "20261026"
-$ScribusLibsSha256 = "e870d0c7102180aa58400858d17f1d569e0de888b324c58c73f4fc6cbfe69a07"
-$ScribusLibsUrl = "https://downloads.sourceforge.net/project/scribus/scribus-libs/scribus-1.7.x/scribus-1.7.x-libs-msvc-$ScribusLibsDate.7z"
-$ScribusSourceUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion.tar.xz"
+# These checksums are published by the official Scribus SourceForge downloads.
+$ScribusInstallerSha256 = "53b9446319026c4575b53706d4adcf26f0aebb3bc74c41a0fdd5cf89fb535778"
 $ScribusSourceSha256 = "1f9e0b62e38a2ba89cc71d6764b1ec3114f24125b717e45cce7ea7d99ab3fe6b"
+$ScribusInstallerUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion-windows-x64.exe"
+$ScribusSourceUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion.tar.xz"
 $QtRoot = $env:QT_ROOT_DIR
 
 function Invoke-External {
@@ -25,8 +25,21 @@ function Invoke-External {
 
     Write-Host ">> $Executable $($ToolArguments -join ' ')"
     & $Executable @ToolArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE : $Executable"
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Command failed with exit code $exitCode : $Executable"
+    }
+}
+
+function Assert-Sha256 {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Expected
+    )
+
+    $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $Expected) {
+        throw "SHA-256 mismatch for $Path. Expected $Expected; got $actual."
     }
 }
 
@@ -34,118 +47,131 @@ $RepositoryRoot = (Resolve-Path $RepositoryRoot).Path
 if ([string]::IsNullOrWhiteSpace($QtRoot) -or -not (Test-Path (Join-Path $QtRoot "bin\moc.exe"))) {
     throw "Qt MSVC tools were not found. QT_ROOT_DIR='$QtRoot'."
 }
-$requiredQtFiles = @(
+foreach ($relativePath in @(
     "lib\Qt6Core.lib",
     "lib\Qt6Concurrent.lib",
     "lib\Qt6Core5Compat.lib",
-    "lib\Qt6Svg.lib"
-)
-foreach ($relativePath in $requiredQtFiles) {
+    "lib\Qt6Gui.lib",
+    "lib\Qt6Widgets.lib",
+    "lib\Qt6Xml.lib"
+)) {
     if (-not (Test-Path (Join-Path $QtRoot $relativePath))) {
-        throw "Missing matching Qt library: $relativePath under $QtRoot"
+        throw "Required Qt library is missing: $relativePath under $QtRoot"
     }
 }
 
 $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 $sevenZipCommand = Get-Command 7z.exe -ErrorAction SilentlyContinue
-$sevenZip = if ($sevenZipCommand) { $sevenZipCommand.Source } else { Join-Path $env:ProgramFiles "7-Zip\7z.exe" }
+$sevenZip = if ($sevenZipCommand) { $sevenZipCommand.Source } else { "C:\Program Files\7-Zip\7z.exe" }
 if (-not (Test-Path $sevenZip)) {
-    throw "7-Zip is required to extract Scribus' MSVC dependency archive."
+    throw "7-Zip is required to extract the official Scribus installer."
 }
+
+$vswhere = Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path $vswhere)) {
+    throw "Could not locate Visual Studio Installer's vswhere.exe."
+}
+$vsInstall = & $vswhere -latest -products "*" -property installationPath
+if ($LASTEXITCODE -ne 0 -or -not $vsInstall) {
+    throw "Could not locate the installed Visual Studio toolchain."
+}
+$msvcBinRoot = Join-Path $vsInstall "VC\Tools\MSVC"
+$dumpbinCandidates = @(Get-ChildItem $msvcBinRoot -Filter "dumpbin.exe" -File -Recurse |
+    Where-Object { $_.FullName -match "\\bin\\Hostx64\\x64\\dumpbin\.exe$" } |
+    Sort-Object FullName -Descending)
+$libCandidates = @(Get-ChildItem $msvcBinRoot -Filter "lib.exe" -File -Recurse |
+    Where-Object { $_.FullName -match "\\bin\\Hostx64\\x64\\lib\.exe$" } |
+    Sort-Object FullName -Descending)
+if ($dumpbinCandidates.Count -eq 0 -or $libCandidates.Count -eq 0) {
+    throw "Could not locate x64 MSVC dumpbin.exe and lib.exe."
+}
+$dumpbin = $dumpbinCandidates[0].FullName
+$libTool = $libCandidates[0].FullName
 
 New-Item -ItemType Directory -Path $WorkspaceRoot -Force | Out-Null
-$libsDirectory = Join-Path $WorkspaceRoot "libs"
-New-Item -ItemType Directory -Path $libsDirectory -Force | Out-Null
+$hostSdkDirectory = Join-Path $WorkspaceRoot "host-sdk"
+New-Item -ItemType Directory -Path $hostSdkDirectory -Force | Out-Null
 
-$libPropsFiles = @(Get-ChildItem -Path $libsDirectory -Filter "scribus-lib-paths.props" -File -Recurse -ErrorAction SilentlyContinue)
-if ($libPropsFiles.Count -eq 0) {
-    $libsArchive = Join-Path $env:RUNNER_TEMP "scribus-1.7.x-libs-msvc-$ScribusLibsDate.7z"
-    Invoke-External "curl.exe" @("--fail", "--location", "--retry", "4", $ScribusLibsUrl, "--output", $libsArchive)
-
-    $actualHash = (Get-FileHash -Path $libsArchive -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualHash -ne $ScribusLibsSha256) {
-        throw "Scribus dependency archive SHA-256 mismatch. Expected $ScribusLibsSha256, got $actualHash."
-    }
-
-    Invoke-External $sevenZip @("x", "-y", "-o$libsDirectory", $libsArchive)
-    $libPropsFiles = @(Get-ChildItem -Path $libsDirectory -Filter "scribus-lib-paths.props" -File -Recurse)
-}
-if ($libPropsFiles.Count -eq 0) {
-    throw "The Scribus MSVC dependency archive did not contain scribus-lib-paths.props."
-}
-$libPropsFile = $libPropsFiles | Sort-Object { $_.FullName.Length } | Select-Object -First 1
-$libRoot = $libPropsFile.Directory.FullName
-
-$libsReadyMarker = Join-Path $libRoot ".photobookbrowser-msvc-v143-x64-release-ready"
-if (-not (Test-Path $libsReadyMarker)) {
-    $libSolutions = @(Get-ChildItem -Path $libsDirectory -Filter "*.sln" -File -Recurse | Sort-Object { $_.FullName.Length })
-    if ($libSolutions.Count -eq 0) {
-        throw "No Visual Studio solution was found in the Scribus dependency kit."
-    }
-    $libSolution = $libSolutions[0]
-    Write-Host "Building Scribus dependency solution: $($libSolution.FullName)"
-    Invoke-External $msbuild @(
-        $libSolution.FullName,
-        "/nologo",
-        "/m:2",
-        "/p:Configuration=Release",
-        "/p:Platform=x64",
-        "/p:PlatformToolset=v143",
-        "/p:SCRIBUS_LIB_ROOT=$libRoot",
-        "/p:QT6_DIR=$QtRoot",
-        "/v:minimal"
+# Extract the exact official Windows application. Its export table is the source
+# of truth for the import library; this avoids rebuilding the entire Scribus app.
+$installerPath = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion-windows-x64.exe"
+$installerExtract = Join-Path $env:RUNNER_TEMP "scribus-windows-extracted"
+if (-not (Test-Path $installerPath)) {
+    Invoke-External "curl.exe" @(
+        "--fail", "--location", "--retry", "4", "--retry-all-errors",
+        "--connect-timeout", "30", "--max-time", "900",
+        $ScribusInstallerUrl, "--output", $installerPath
     )
-    Set-Content -Path $libsReadyMarker -Value "Release|x64|v143|$ScribusLibsDate" -Encoding ASCII
 }
-else {
-    Write-Host "Using cached Scribus MSVC dependencies: $libRoot"
+Assert-Sha256 -Path $installerPath -Expected $ScribusInstallerSha256
+
+if (Test-Path $installerExtract) {
+    Remove-Item -Path $installerExtract -Recurse -Force
+}
+New-Item -ItemType Directory -Path $installerExtract -Force | Out-Null
+Invoke-External $sevenZip @("x", "-y", "-o$installerExtract", $installerPath)
+
+$scribusExeMatches = @(Get-ChildItem -Path $installerExtract -Filter "Scribus.exe" -File -Recurse)
+if ($scribusExeMatches.Count -eq 0) {
+    throw "Scribus.exe was not found in the extracted official Scribus $ScribusVersion installer."
+}
+$scribusExe = $scribusExeMatches[0].FullName
+$hostHeaders = (& $dumpbin /headers $scribusExe | Out-String)
+if ($LASTEXITCODE -ne 0 -or $hostHeaders -notmatch "8664 machine \(x64\)") {
+    throw "The official Scribus executable is not an x64 PE binary."
 }
 
+Write-Host "Reading exported plugin API symbols from: $scribusExe"
+$exportTable = (& $dumpbin /exports $scribusExe | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    throw "dumpbin could not read exports from the official Scribus executable."
+}
+$exportNames = @(
+    foreach ($line in ($exportTable -split "\r?\n")) {
+        if ($line -match "^\s*\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(.+?)\s*$") {
+            $Matches[1].Trim()
+        }
+    }
+    | Where-Object { $_ -and $_ -notmatch "^\(" }
+    | Sort-Object -Unique
+)
+if ($exportNames.Count -lt 10) {
+    throw "The official Scribus executable export table contained only $($exportNames.Count) named exports; refusing to create an incomplete import library."
+}
+Write-Host "Found $($exportNames.Count) named Scribus API exports."
+
+$definitionFile = Join-Path $hostSdkDirectory "Scribus.def"
+$importLibrary = Join-Path $hostSdkDirectory "scribus-api.lib"
+$definitionLines = @('LIBRARY "Scribus.exe"', "EXPORTS") + @($exportNames | ForEach-Object { "    $_" })
+[System.IO.File]::WriteAllLines($definitionFile, $definitionLines, [System.Text.Encoding]::ASCII)
+Invoke-External $libTool @(
+    "/nologo",
+    "/def:$definitionFile",
+    "/machine:x64",
+    "/out:$importLibrary"
+)
+if (-not (Test-Path $importLibrary)) {
+    throw "MSVC did not create the Scribus executable import library."
+}
+
+# Fetch the matching release sources for Scribus headers and its native MSVC
+# Picture Browser project template.
 $sourceRoot = Join-Path $WorkspaceRoot "src"
 if (Test-Path $sourceRoot) {
     Remove-Item -Path $sourceRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
 $sourceArchive = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion.tar.xz"
-Invoke-External "curl.exe" @("--fail", "--location", "--retry", "4", $ScribusSourceUrl, "--output", $sourceArchive)
-$actualSourceHash = (Get-FileHash -Path $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualSourceHash -ne $ScribusSourceSha256) {
-    throw "Scribus source archive SHA-256 mismatch. Expected $ScribusSourceSha256, got $actualSourceHash."
-}
+Invoke-External "curl.exe" @(
+    "--fail", "--location", "--retry", "4", "--retry-all-errors",
+    "--connect-timeout", "30", "--max-time", "900",
+    $ScribusSourceUrl, "--output", $sourceArchive
+)
+Assert-Sha256 -Path $sourceArchive -Expected $ScribusSourceSha256
 Invoke-External "tar.exe" @("-xJf", $sourceArchive, "-C", $sourceRoot, "--strip-components=1")
-
-$scribusSolution = Join-Path $sourceRoot "win32\msvc2022\Scribus.sln"
-if (-not (Test-Path $scribusSolution)) {
-    throw "The Scribus $ScribusVersion source archive does not contain win32\msvc2022\Scribus.sln."
-}
-$buildRoot = Join-Path $WorkspaceRoot "Scribus-builds"
-$applicationOutput = Join-Path $buildRoot "Scribus-Release-x64-v143"
-$scribusApiLibrary = Join-Path $applicationOutput "scribus-api.lib"
-
-if (-not (Test-Path $scribusApiLibrary)) {
-    Write-Host "Building the matching Scribus $ScribusVersion MSVC application target to produce scribus-api.lib."
-    Invoke-External $msbuild @(
-        $scribusSolution,
-        "/nologo",
-        "/t:scribus-main",
-        "/m:2",
-        "/p:Configuration=Release",
-        "/p:Platform=x64",
-        "/p:PlatformToolset=v143",
-        "/p:SCRIBUS_LIB_ROOT=$libRoot",
-        "/p:QT6_DIR=$QtRoot",
-        "/v:minimal"
-    )
-}
-if (-not (Test-Path $scribusApiLibrary)) {
-    throw "Scribus did not produce the MSVC plugin import library: $scribusApiLibrary"
-}
 
 $pluginSourceDirectory = Join-Path $RepositoryRoot "plugin"
 $scribusPluginDirectory = Join-Path $sourceRoot "scribus\plugins\photobookbrowser"
-if (Test-Path $scribusPluginDirectory) {
-    Remove-Item -Path $scribusPluginDirectory -Recurse -Force
-}
 New-Item -ItemType Directory -Path $scribusPluginDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $pluginSourceDirectory "*") -Destination $scribusPluginDirectory -Recurse -Force
 
@@ -154,7 +180,7 @@ New-Item -ItemType Directory -Path $projectDirectory -Force | Out-Null
 $templateProject = Join-Path $sourceRoot "win32\msvc2022\picturebrowser\picturebrowser.vcxproj"
 $pluginProject = Join-Path $projectDirectory "photobookbrowser.vcxproj"
 if (-not (Test-Path $templateProject)) {
-    throw "Scribus' built-in Picture Browser MSVC project was not found: $templateProject"
+    throw "Scribus' native Picture Browser MSVC project template was not found."
 }
 
 $document = New-Object System.Xml.XmlDocument
@@ -165,56 +191,71 @@ $namespaces = New-Object System.Xml.XmlNamespaceManager($document.NameTable)
 $namespaces.AddNamespace("msb", $namespaceUri)
 
 $guidNode = $document.SelectSingleNode("//msb:PropertyGroup[@Label='Globals']/msb:ProjectGuid", $namespaces)
-if (-not $guidNode) { throw "Could not locate ProjectGuid in Scribus' plugin template." }
+if (-not $guidNode) { throw "The Visual Studio project template has no ProjectGuid." }
 $guidNode.InnerText = ([guid]::NewGuid()).ToString("B").ToUpperInvariant()
-
 $rootNamespaceNode = $document.SelectSingleNode("//msb:PropertyGroup[@Label='Globals']/msb:RootNamespace", $namespaces)
 if ($rootNamespaceNode) { $rootNamespaceNode.InnerText = "photobookbrowser" }
 foreach ($targetName in $document.SelectNodes("//msb:TargetName", $namespaces)) {
     $targetName.InnerText = "photobookbrowser"
 }
 
-$userMacros = $document.SelectSingleNode("//msb:PropertyGroup[@Label='UserMacros']", $namespaces)
-if (-not $userMacros) { throw "Could not locate the UserMacros property group in Scribus' plugin template." }
-foreach ($existing in @($userMacros.SelectNodes("msb:QT6CONCURRENT_LIB", $namespaces))) {
-    [void]$userMacros.RemoveChild($existing)
+# The upstream properties sheet points to a developer-specific dependency kit
+# path. Remove it: this plugin only needs the official host import library and
+# the exact Qt/MSVC libraries installed in this workflow.
+$dependencyPropertyImports = @($document.SelectNodes("//msb:Import[@Project='..\\Scribus-build-props.props']", $namespaces))
+foreach ($node in $dependencyPropertyImports) {
+    [void]$node.ParentNode.RemoveChild($node)
 }
-$debugConcurrent = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
-$debugConcurrent.SetAttribute("Condition", "'`$(Configuration)' == 'Debug'")
-$debugConcurrent.InnerText = "Qt6Concurrentd.lib"
-[void]$userMacros.AppendChild($debugConcurrent)
-$releaseConcurrent = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
-$releaseConcurrent.SetAttribute("Condition", "'`$(Configuration)' == 'Release'")
-$releaseConcurrent.InnerText = "Qt6Concurrent.lib"
-[void]$userMacros.AppendChild($releaseConcurrent)
 
-$obsoleteNodes = @(
-    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'picbrowser')]", $namespaces)
-    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'plugins_pch.cpp')]", $namespaces)
-    $document.SelectNodes("//msb:ClInclude[contains(@Include, 'picbrowser')]", $namespaces)
-    $document.SelectNodes("//msb:moc[contains(@Include, 'picbrowser')]", $namespaces)
-    $document.SelectNodes("//msb:uic", $namespaces)
+# The upstream Picture Browser uses a precompiled header and several unrelated
+# dependencies. This plugin is built without PCH and links only what it uses.
+foreach ($node in @(
+    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'picbrowser')]", $namespaces),
+    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'plugins_pch.cpp')]", $namespaces),
+    $document.SelectNodes("//msb:ClInclude[contains(@Include, 'picbrowser')]", $namespaces),
+    $document.SelectNodes("//msb:moc[contains(@Include, 'picbrowser')]", $namespaces),
+    $document.SelectNodes("//msb:uic", $namespaces),
     $document.SelectNodes("//msb:ResourceCompile", $namespaces)
-)
-foreach ($node in $obsoleteNodes) {
+)) {
     if ($node -and $node.ParentNode) {
         [void]$node.ParentNode.RemoveChild($node)
     }
 }
+foreach ($xpath in @(
+    "//msb:ItemDefinitionGroup/msb:ClCompile/msb:PrecompiledHeader",
+    "//msb:ItemDefinitionGroup/msb:ClCompile/msb:PrecompiledHeaderFile",
+    "//msb:ItemDefinitionGroup/msb:ClCompile/msb:ForcedIncludeFiles"
+)) {
+    foreach ($node in @($document.SelectNodes($xpath, $namespaces))) {
+        [void]$node.ParentNode.RemoveChild($node)
+    }
+}
 
-# QtConcurrent headers are in their own module include directory. Scribus' built-in
-# Picture Browser project does not need that module, so add it for this plugin.
+# Make QtConcurrent's headers visible and remove SDK-kit-specific link inputs.
 foreach ($includeDirectory in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:ClCompile/msb:AdditionalIncludeDirectories", $namespaces)) {
     if ($includeDirectory.InnerText -notmatch "QtConcurrent") {
         $includeDirectory.InnerText = '$(QT6_DIR)\include\QtConcurrent;' + $includeDirectory.InnerText
     }
 }
+foreach ($dependencies in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:Link/msb:AdditionalDependencies", $namespaces)) {
+    $dependencies.InnerText = 'Qt6Core.lib;Qt6Core5Compat.lib;Qt6Gui.lib;Qt6Widgets.lib;Qt6Xml.lib;Qt6Concurrent.lib;scribus-api.lib;%(AdditionalDependencies)'
+}
+foreach ($libraryDirectories in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:Link/msb:AdditionalLibraryDirectories", $namespaces)) {
+    $libraryDirectories.InnerText = '$(QT6_DIR)\lib;$(SCRIBUS_API_LIB_DIR);%(AdditionalLibraryDirectories)'
+}
+
+$userMacros = $document.SelectSingleNode("//msb:PropertyGroup[@Label='UserMacros']", $namespaces)
+if (-not $userMacros) { throw "The Visual Studio template has no UserMacros property group." }
+$concurrentLibrary = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
+$concurrentLibrary.SetAttribute("Condition", "'$(Configuration)' == 'Release'")
+$concurrentLibrary.InnerText = "Qt6Concurrent.lib"
+[void]$userMacros.AppendChild($concurrentLibrary)
 
 $targetsImport = $document.SelectSingleNode('//msb:Import[@Project="$(VCTargetsPath)\Microsoft.Cpp.targets"]', $namespaces)
-if (-not $targetsImport) { throw "Could not locate Microsoft.Cpp.targets import in plugin template." }
+if (-not $targetsImport) { throw "The Visual Studio template has no Microsoft.Cpp.targets import." }
 
 $compileGroup = $document.CreateElement("ItemGroup", $namespaceUri)
-$pluginSources = @(
+$sources = @(
     "photobookbrowserplugin.cpp",
     "photobookbrowserpalette.cpp",
     "photobookbrowsermodel.cpp",
@@ -222,24 +263,15 @@ $pluginSources = @(
     "photobookbrowserfilterproxy.cpp",
     "photobookbrowserthumbnailloader.cpp"
 )
-foreach ($source in $pluginSources) {
+foreach ($source in $sources) {
     $item = $document.CreateElement("ClCompile", $namespaceUri)
     $item.SetAttribute("Include", "..\..\..\scribus\plugins\photobookbrowser\$source")
     [void]$compileGroup.AppendChild($item)
 }
-$pchItem = $document.CreateElement("ClCompile", $namespaceUri)
-$pchItem.SetAttribute("Include", "..\..\..\scribus\plugins\plugins_pch.cpp")
-foreach ($configuration in @("Debug|Win32", "Debug|x64", "Release|Win32", "Release|x64")) {
-    $pchSetting = $document.CreateElement("PrecompiledHeader", $namespaceUri)
-    $pchSetting.SetAttribute("Condition", "'`$(Configuration)|`$(Platform)'=='$configuration'")
-    $pchSetting.InnerText = "Create"
-    [void]$pchItem.AppendChild($pchSetting)
-}
-[void]$compileGroup.AppendChild($pchItem)
 [void]$document.DocumentElement.InsertBefore($compileGroup, $targetsImport)
 
 $mocGroup = $document.CreateElement("ItemGroup", $namespaceUri)
-$pluginHeaders = @(
+$headers = @(
     "photobookbrowserplugin.h",
     "photobookbrowserpalette.h",
     "photobookbrowsermodel.h",
@@ -247,18 +279,12 @@ $pluginHeaders = @(
     "photobookbrowserfilterproxy.h",
     "photobookbrowserthumbnailloader.h"
 )
-foreach ($header in $pluginHeaders) {
+foreach ($header in $headers) {
     $item = $document.CreateElement("moc", $namespaceUri)
     $item.SetAttribute("Include", "..\..\..\scribus\plugins\photobookbrowser\$header")
     [void]$mocGroup.AppendChild($item)
 }
 [void]$document.DocumentElement.InsertBefore($mocGroup, $targetsImport)
-
-foreach ($dependencies in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:Link/msb:AdditionalDependencies", $namespaces)) {
-    if ($dependencies.InnerText -notmatch "QT6CONCURRENT_LIB") {
-        $dependencies.InnerText = $dependencies.InnerText.Replace("%(AdditionalDependencies)", '$(QT6CONCURRENT_LIB);%(AdditionalDependencies)')
-    }
-}
 
 $writerSettings = New-Object System.Xml.XmlWriterSettings
 $writerSettings.Encoding = New-Object System.Text.UTF8Encoding($true)
@@ -272,7 +298,8 @@ finally {
     $writer.Dispose()
 }
 
-Write-Host "Generated MSVC plugin project: $pluginProject"
+Write-Host "Generated x64 MSVC plugin project: $pluginProject"
+$buildRoot = Join-Path $WorkspaceRoot "Scribus-builds"
 Invoke-External $msbuild @(
     $pluginProject,
     "/nologo",
@@ -280,8 +307,9 @@ Invoke-External $msbuild @(
     "/p:Configuration=Release",
     "/p:Platform=x64",
     "/p:PlatformToolset=v143",
-    "/p:SCRIBUS_LIB_ROOT=$libRoot",
+    "/p:SCRIBUS_CPP_STANDARD=202002",
     "/p:QT6_DIR=$QtRoot",
+    "/p:SCRIBUS_API_LIB_DIR=$hostSdkDirectory",
     "/v:minimal"
 )
 
@@ -290,30 +318,32 @@ if (-not (Test-Path $pluginDll)) {
     throw "The MSVC build did not produce photobookbrowser.dll at $pluginDll"
 }
 
-$vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path $vswhere)) { throw "Could not locate vswhere.exe to inspect the MSVC plugin." }
-$vsInstall = & $vswhere -latest -products "*" -property installationPath
-if ($LASTEXITCODE -ne 0 -or -not $vsInstall) { throw "Could not locate the installed Visual Studio toolchain." }
-$dumpbinCandidates = @(Get-ChildItem (Join-Path $vsInstall "VC\Tools\MSVC") -Filter "dumpbin.exe" -File -Recurse |
-    Where-Object { $_.FullName -match "\\bin\\Hostx64\\x64\\dumpbin\.exe$" } |
-    Sort-Object FullName -Descending)
-if ($dumpbinCandidates.Count -eq 0) { throw "Could not locate the x64 MSVC dumpbin.exe." }
-$dumpbin = $dumpbinCandidates[0].FullName
-
-$headers = (& $dumpbin /headers $pluginDll | Out-String)
-if ($LASTEXITCODE -ne 0 -or $headers -notmatch "8664 machine \(x64\)") {
-    throw "The generated PhotoBook Browser DLL is not a valid x64 PE binary."
+$peHeaders = (& $dumpbin /headers $pluginDll | Out-String)
+if ($LASTEXITCODE -ne 0 -or $peHeaders -notmatch "8664 machine \(x64\)") {
+    throw "The generated PhotoBook Browser plugin is not a valid x64 PE DLL."
 }
-$dependents = (& $dumpbin /dependents $pluginDll | Out-String)
-if ($LASTEXITCODE -ne 0) { throw "dumpbin could not inspect the plugin's import table." }
-foreach ($requiredImport in @("Scribus.exe", "Qt6Core.dll", "Qt6Concurrent.dll")) {
-    if ($dependents -notmatch [regex]::Escape($requiredImport)) {
-        throw ("The plugin does not import expected host/runtime library '" + $requiredImport + "'. Import table:" + [Environment]::NewLine + $dependents)
+$imports = (& $dumpbin /dependents $pluginDll | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    throw "dumpbin could not inspect the plugin import table."
+}
+foreach ($requiredImport in @("Scribus.exe", "Qt6Core.dll", "Qt6Concurrent.dll", "Qt6Widgets.dll")) {
+    if ($imports -notmatch [regex]::Escape($requiredImport)) {
+        throw ("The plugin does not import expected host/runtime library '" + $requiredImport + "'. Imports:" + [Environment]::NewLine + $imports)
     }
 }
-Write-Host "Verified x64 plugin imports:"
-Write-Host $dependents
+$pluginExports = (& $dumpbin /exports $pluginDll | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    throw "dumpbin could not inspect the plugin's exported entry points."
+}
+foreach ($pluginEntryPoint in @("photobookbrowser_getPluginAPIVersion", "photobookbrowser_getPlugin", "photobookbrowser_freePlugin")) {
+    if ($pluginExports -notmatch [regex]::Escape($pluginEntryPoint)) {
+        throw "The generated DLL is missing Scribus plugin entry point '$pluginEntryPoint'."
+    }
+}
 
+Write-Host "Verified x64 plugin imports:"
+Write-Host $imports
+Write-Host "Verified Scribus plugin entry points."
 $distDirectory = Join-Path $RepositoryRoot "dist"
 New-Item -ItemType Directory -Path $distDirectory -Force | Out-Null
 $artifactName = "photobookbrowser-$PluginVersion-scribus-$ScribusVersion-windows-x64-msvc.dll"

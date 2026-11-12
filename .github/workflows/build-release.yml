@@ -282,7 +282,7 @@ jobs:
     needs: cancel-stale
     name: Windows x64 / Scribus 1.7.4 (MSVC 2022)
     runs-on: windows-2022
-    timeout-minutes: 360
+    timeout-minutes: 90
     permissions:
       contents: write
     env:
@@ -305,20 +305,12 @@ jobs:
           arch: win64_msvc2022_64
           dir: C:\s\qt
           modules: qt5compat
-          archives: qtbase qtsvg
+          archives: qtbase
           # Qt 6.11 moved Windows kit metadata into per-kit directories.
           # Pin aqtinstall's merged support until the fix reaches a PyPI release.
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 
-      - name: Cache Scribus MSVC dependencies and host import library
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:\s\libs
-            C:\s\Scribus-builds\Scribus-Release-x64-v143
-          key: scribus-msvc-1.7.4-qt6.11.3-libs-20261026-v143-release-x64
-
-      - name: Build an MSVC plugin for the official Scribus ABI
+      - name: Build and verify plugin against the official Scribus MSVC ABI
         shell: pwsh
         run: .\.github\scripts\build-windows-msvc.ps1 -RepositoryRoot "$env:GITHUB_WORKSPACE" -ScribusVersion "$env:SCRIBUS_VERSION" -PluginVersion "$env:BUILD_VERSION"
 
