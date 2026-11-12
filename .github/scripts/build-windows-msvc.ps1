@@ -212,23 +212,25 @@ foreach ($targetName in $document.SelectNodes("//msb:TargetName", $namespaces)) 
 # The upstream properties sheet points to a developer-specific dependency kit
 # path. Remove it: this plugin only needs the official host import library and
 # the exact Qt/MSVC libraries installed in this workflow.
-$dependencyPropertyImports = @($document.SelectNodes("//msb:Import[contains(@Project, 'Scribus-build-props.props')]", $namespaces))
-foreach ($node in $dependencyPropertyImports) {
+foreach ($node in $document.SelectNodes("//msb:Import[contains(@Project, 'Scribus-build-props.props')]", $namespaces)) {
     [void]$node.ParentNode.RemoveChild($node)
 }
 
 # The upstream Picture Browser uses a precompiled header and several unrelated
 # dependencies. This plugin is built without PCH and links only what it uses.
-foreach ($node in @(
-    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'picbrowser')]", $namespaces),
-    $document.SelectNodes("//msb:ClCompile[contains(@Include, 'plugins_pch.cpp')]", $namespaces),
-    $document.SelectNodes("//msb:ClInclude[contains(@Include, 'picbrowser')]", $namespaces),
-    $document.SelectNodes("//msb:moc[contains(@Include, 'picbrowser')]", $namespaces),
-    $document.SelectNodes("//msb:uic", $namespaces),
-    $document.SelectNodes("//msb:ResourceCompile", $namespaces)
-)) {
-    if ($node -and $node.ParentNode) {
-        [void]$node.ParentNode.RemoveChild($node)
+$obsoleteItemQueries = @(
+    "//msb:ClCompile[contains(@Include, 'picbrowser')]",
+    "//msb:ClCompile[contains(@Include, 'plugins_pch.cpp')]",
+    "//msb:ClInclude[contains(@Include, 'picbrowser')]",
+    "//msb:moc[contains(@Include, 'picbrowser')]",
+    "//msb:uic",
+    "//msb:ResourceCompile"
+)
+foreach ($xpath in $obsoleteItemQueries) {
+    foreach ($node in $document.SelectNodes($xpath, $namespaces)) {
+        if ($node.ParentNode) {
+            [void]$node.ParentNode.RemoveChild($node)
+        }
     }
 }
 foreach ($xpath in @(
@@ -236,7 +238,7 @@ foreach ($xpath in @(
     "//msb:ItemDefinitionGroup/msb:ClCompile/msb:PrecompiledHeaderFile",
     "//msb:ItemDefinitionGroup/msb:ClCompile/msb:ForcedIncludeFiles"
 )) {
-    foreach ($node in @($document.SelectNodes($xpath, $namespaces))) {
+    foreach ($node in $document.SelectNodes($xpath, $namespaces)) {
         [void]$node.ParentNode.RemoveChild($node)
     }
 }
