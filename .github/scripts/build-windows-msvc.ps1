@@ -362,7 +362,7 @@ finally {
 }
 
 Write-Host "Generated x64 MSVC plugin project: $pluginProject"
-$buildRoot = $sourceExtract
+$buildRoot = Join-Path $sourceExtract "Scribus-builds"
 Invoke-External $msbuild @(
     $pluginProject,
     "/nologo",
