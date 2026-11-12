@@ -126,15 +126,16 @@ $exportTable = (& $dumpbin /exports $scribusExe | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "dumpbin could not read exports from the official Scribus executable."
 }
-$exportNames = @(
-    foreach ($line in ($exportTable -split "\r?\n")) {
-        if ($line -match "^\s*\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(.+?)\s*$") {
-            $Matches[1].Trim()
+$exportNameList = [System.Collections.Generic.List[string]]::new()
+foreach ($line in ($exportTable -split "\r?\n")) {
+    if ($line -match "^\s*\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(.+?)\s*$") {
+        $candidate = $Matches[1].Trim()
+        if ($candidate -and $candidate -notmatch "^\(") {
+            [void]$exportNameList.Add($candidate)
         }
     }
-    | Where-Object { $_ -and $_ -notmatch "^\(" }
-    | Sort-Object -Unique
-)
+}
+$exportNames = @($exportNameList | Sort-Object -Unique)
 if ($exportNames.Count -lt 10) {
     throw "The official Scribus executable export table contained only $($exportNames.Count) named exports; refusing to create an incomplete import library."
 }
