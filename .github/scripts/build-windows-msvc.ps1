@@ -112,7 +112,9 @@ New-Item -ItemType Directory -Path $hostSdkDirectory -Force | Out-Null
 
 # Extract the exact official Windows application. Its export table is the source
 # of truth for the import library; this avoids rebuilding the entire Scribus app.
-$installerPath = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion-windows-x64.exe"
+$sourceCacheDirectory = Join-Path $RepositoryRoot "scribus-source-cache"
+New-Item -ItemType Directory -Path $sourceCacheDirectory -Force | Out-Null
+$installerPath = Join-Path $sourceCacheDirectory "scribus-$ScribusVersion-windows-x64.exe"
 $installerExtract = Join-Path $env:RUNNER_TEMP "scribus-windows-extracted"
 if (-not (Test-Path $installerPath)) {
     Invoke-External "curl.exe" @(
@@ -181,12 +183,15 @@ if (Test-Path $sourceExtract) {
     Remove-Item -Path $sourceExtract -Recurse -Force
 }
 New-Item -ItemType Directory -Path $sourceExtract -Force | Out-Null
-$sourceArchive = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion.7z"
-Invoke-External "curl.exe" @(
-    "--fail", "--location", "--retry", "4", "--retry-all-errors",
-    "--connect-timeout", "30", "--max-time", "900",
-    $ScribusSourceUrl, "--output", $sourceArchive
-)
+$sourceArchive = Join-Path $sourceCacheDirectory "scribus-$ScribusVersion.7z"
+if (-not (Test-Path $sourceArchive)) {
+    Invoke-External "curl.exe" @(
+        "--fail", "--location", "--retry", "10", "--retry-all-errors", "--retry-delay", "10",
+        "--connect-timeout", "30", "--max-time", "1800",
+        $ScribusSourceUrl, "--output", "$sourceArchive.part"
+    )
+    Move-Item -Path "$sourceArchive.part" -Destination $sourceArchive -Force
+}
 Assert-Sha256 -Path $sourceArchive -Expected $ScribusSourceSha256
 Invoke-External $sevenZip @("x", "-y", "-o$sourceExtract", $sourceArchive)
 
@@ -212,12 +217,15 @@ foreach ($directory in @($freetypeExtract, $freetypeTarStage)) {
     }
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
 }
-$freetypeArchive = Join-Path $env:RUNNER_TEMP "freetype-$FreetypeVersion.tar.xz"
-Invoke-External "curl.exe" @(
-    "--fail", "--location", "--retry", "4", "--retry-all-errors",
-    "--connect-timeout", "30", "--max-time", "300",
-    $FreetypeArchiveUrl, "--output", $freetypeArchive
-)
+$freetypeArchive = Join-Path $sourceCacheDirectory "freetype-$FreetypeVersion.tar.xz"
+if (-not (Test-Path $freetypeArchive)) {
+    Invoke-External "curl.exe" @(
+        "--fail", "--location", "--retry", "10", "--retry-all-errors", "--retry-delay", "10",
+        "--connect-timeout", "30", "--max-time", "1800",
+        $FreetypeArchiveUrl, "--output", "$freetypeArchive.part"
+    )
+    Move-Item -Path "$freetypeArchive.part" -Destination $freetypeArchive -Force
+}
 Assert-Sha256 -Path $freetypeArchive -Expected $FreetypeArchiveSha256
 Invoke-External $sevenZip @("x", "-y", "-o$freetypeTarStage", $freetypeArchive)
 $freetypeTar = Get-ChildItem -Path $freetypeTarStage -Filter "freetype-$FreetypeVersion.tar" -File -Recurse |

@@ -362,8 +362,29 @@ jobs:
         with:
           files: ${{ runner.temp }}/dist/*
 
-  build-windows-msvc:
+  prepare-windows-sources:
+    name: Cache Windows Scribus and FreeType source archives
     needs: cancel-stale
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore or create Windows source archive cache
+        id: windows-source-cache
+        uses: actions/cache@v6
+        with:
+          path: scribus-source-cache
+          key: scribus-source-windows-v1-scribus-1.7.4-freetype-2.15.0
+
+      - name: Download and verify missing Windows source archives
+        if: steps.windows-source-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: .\.github\scripts\prepare-windows-sources.ps1
+
+  build-windows-msvc:
+    needs: [cancel-stale, prepare-windows-sources]
     name: Windows x64 / Scribus 1.7.4 (MSVC 2022)
     runs-on: windows-2022
     timeout-minutes: 90
@@ -376,6 +397,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Restore cached Windows Scribus and FreeType source archives
+        uses: actions/cache/restore@v6
+        with:
+          path: scribus-source-cache
+          key: scribus-source-windows-v1-scribus-1.7.4-freetype-2.15.0
 
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
