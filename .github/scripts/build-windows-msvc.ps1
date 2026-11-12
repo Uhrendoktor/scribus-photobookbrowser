@@ -14,6 +14,7 @@ $ScribusLibsDate = "20261026"
 $ScribusLibsSha256 = "e870d0c7102180aa58400858d17f1d569e0de888b324c58c73f4fc6cbfe69a07"
 $ScribusLibsUrl = "https://downloads.sourceforge.net/project/scribus/scribus-libs/scribus-1.7.x/scribus-1.7.x-libs-msvc-$ScribusLibsDate.7z"
 $ScribusSourceUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion.tar.xz"
+$ScribusSourceSha256 = "1f9e0b62e38a2ba89cc71d6764b1ec3114f24125b717e45cce7ea7d99ab3fe6b"
 $QtRoot = $env:QT_ROOT_DIR
 
 function Invoke-External {
@@ -90,6 +91,8 @@ if (-not (Test-Path $libsReadyMarker)) {
         "/p:Configuration=Release",
         "/p:Platform=x64",
         "/p:PlatformToolset=v143",
+        "/p:SCRIBUS_LIB_ROOT=$libRoot",
+        "/p:QT6_DIR=$QtRoot",
         "/v:minimal"
     )
     Set-Content -Path $libsReadyMarker -Value "Release|x64|v143|$ScribusLibsDate" -Encoding ASCII
@@ -105,6 +108,10 @@ if (Test-Path $sourceRoot) {
 New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
 $sourceArchive = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion.tar.xz"
 Invoke-External "curl.exe" @("--fail", "--location", "--retry", "4", $ScribusSourceUrl, "--output", $sourceArchive)
+$actualSourceHash = (Get-FileHash -Path $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualSourceHash -ne $ScribusSourceSha256) {
+    throw "Scribus source archive SHA-256 mismatch. Expected $ScribusSourceSha256, got $actualSourceHash."
+}
 Invoke-External "tar.exe" @("-xJf", $sourceArchive, "-C", $sourceRoot, "--strip-components=1")
 
 $scribusSolution = Join-Path $sourceRoot "win32\msvc2022\Scribus.sln"
@@ -192,6 +199,14 @@ $obsoleteNodes = @(
 foreach ($node in $obsoleteNodes) {
     if ($node -and $node.ParentNode) {
         [void]$node.ParentNode.RemoveChild($node)
+    }
+}
+
+# QtConcurrent headers are in their own module include directory. Scribus' built-in
+# Picture Browser project does not need that module, so add it for this plugin.
+foreach ($includeDirectory in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:ClCompile/msb:AdditionalIncludeDirectories", $namespaces)) {
+    if ($includeDirectory.InnerText -notmatch "QtConcurrent") {
+        $includeDirectory.InnerText = '$(QT6_DIR)\include\QtConcurrent;' + $includeDirectory.InnerText
     }
 }
 
