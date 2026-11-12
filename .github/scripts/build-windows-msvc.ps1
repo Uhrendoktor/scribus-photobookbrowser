@@ -173,11 +173,11 @@ foreach ($existing in @($userMacros.SelectNodes("msb:QT6CONCURRENT_LIB", $namesp
     [void]$userMacros.RemoveChild($existing)
 }
 $debugConcurrent = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
-$debugConcurrent.SetAttribute("Condition", "'$(Configuration)' == 'Debug'")
+$debugConcurrent.SetAttribute("Condition", "'`$(Configuration)' == 'Debug'")
 $debugConcurrent.InnerText = "Qt6Concurrentd.lib"
 [void]$userMacros.AppendChild($debugConcurrent)
 $releaseConcurrent = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
-$releaseConcurrent.SetAttribute("Condition", "'$(Configuration)' == 'Release'")
+$releaseConcurrent.SetAttribute("Condition", "'`$(Configuration)' == 'Release'")
 $releaseConcurrent.InnerText = "Qt6Concurrent.lib"
 [void]$userMacros.AppendChild($releaseConcurrent)
 
@@ -195,7 +195,7 @@ foreach ($node in $obsoleteNodes) {
     }
 }
 
-$targetsImport = $document.SelectSingleNode("//msb:Import[@Project='$(VCTargetsPath)\Microsoft.Cpp.targets']", $namespaces)
+$targetsImport = $document.SelectSingleNode('//msb:Import[@Project="$(VCTargetsPath)\Microsoft.Cpp.targets"]', $namespaces)
 if (-not $targetsImport) { throw "Could not locate Microsoft.Cpp.targets import in plugin template." }
 
 $compileGroup = $document.CreateElement("ItemGroup", $namespaceUri)
@@ -216,7 +216,7 @@ $pchItem = $document.CreateElement("ClCompile", $namespaceUri)
 $pchItem.SetAttribute("Include", "..\..\..\scribus\plugins\plugins_pch.cpp")
 foreach ($configuration in @("Debug|Win32", "Debug|x64", "Release|Win32", "Release|x64")) {
     $pchSetting = $document.CreateElement("PrecompiledHeader", $namespaceUri)
-    $pchSetting.SetAttribute("Condition", "'$(Configuration)|$(Platform)'=='$configuration'")
+    $pchSetting.SetAttribute("Condition", "'`$(Configuration)|`$(Platform)'=='$configuration'")
     $pchSetting.InnerText = "Create"
     [void]$pchItem.AppendChild($pchSetting)
 }
@@ -241,7 +241,7 @@ foreach ($header in $pluginHeaders) {
 
 foreach ($dependencies in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:Link/msb:AdditionalDependencies", $namespaces)) {
     if ($dependencies.InnerText -notmatch "QT6CONCURRENT_LIB") {
-        $dependencies.InnerText = $dependencies.InnerText.Replace("%(AdditionalDependencies)", "$(QT6CONCURRENT_LIB);%(AdditionalDependencies)")
+        $dependencies.InnerText = $dependencies.InnerText.Replace("%(AdditionalDependencies)", '$(QT6CONCURRENT_LIB);%(AdditionalDependencies)')
     }
 }
 
