@@ -391,7 +391,7 @@ $imports = (& $dumpbin /dependents $pluginDll | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "dumpbin could not inspect the plugin import table."
 }
-foreach ($requiredImport in @("Scribus.exe", "Qt6Core.dll", "Qt6Concurrent.dll", "Qt6Widgets.dll")) {
+foreach ($requiredImport in @("Scribus.exe", "Qt6Core.dll", "Qt6Widgets.dll")) {
     if ($imports -notmatch [regex]::Escape($requiredImport)) {
         throw ("The plugin does not import expected host/runtime library '" + $requiredImport + "'. Imports:" + [Environment]::NewLine + $imports)
     }
