@@ -44,8 +44,52 @@ jobs:
             gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
           done <<< "$stale_runs"
 
-  build-linux:
+  prepare-linux-sources:
+    name: Cache Scribus ${{ matrix.scribus-version }} source archive
     needs: cancel-stale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scribus-version: ["1.6.5", "1.6.6", "1.6.7", "1.7.0", "1.7.1", "1.7.2", "1.7.3", "1.7.4"]
+    steps:
+      - name: Restore or create immutable Scribus source cache
+        id: source-cache
+        uses: actions/cache@v6
+        with:
+          path: scribus-source-cache/scribus-${{ matrix.scribus-version }}.tar.xz
+          key: scribus-source-v1-${{ matrix.scribus-version }}-tar-xz
+          enableCrossOsArchive: true
+
+      - name: Download missing Scribus source archive
+        if: steps.source-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          SCRIBUS_VERSION: ${{ matrix.scribus-version }}
+        run: |
+          set -euo pipefail
+          mkdir -p scribus-source-cache
+          VERSION="$SCRIBUS_VERSION"
+          if [[ "$VERSION" == 1.6.* ]]; then SERIES="scribus"; else SERIES="scribus-devel"; fi
+          ARCHIVE="scribus-source-cache/scribus-$VERSION.tar.xz"
+          PART="$ARCHIVE.part"
+          curl --fail --location --retry 10 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 30 --max-time 1800 \
+            "https://downloads.sourceforge.net/project/scribus/$SERIES/$VERSION/scribus-$VERSION.tar.xz" \
+            --output "$PART"
+          xz -t "$PART"
+          mv "$PART" "$ARCHIVE"
+
+      - name: Verify cached Scribus source archive
+        shell: bash
+        env:
+          SCRIBUS_VERSION: ${{ matrix.scribus-version }}
+        run: xz -t "scribus-source-cache/scribus-$SCRIBUS_VERSION.tar.xz"
+
+  build-linux:
+    needs: [cancel-stale, prepare-linux-sources]
     name: Linux / Scribus ${{ matrix.scribus-version }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
@@ -79,6 +123,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Restore cached Scribus source archive
+        uses: actions/cache/restore@v6
+        with:
+          path: scribus-source-cache/scribus-${{ matrix.scribus-version }}.tar.xz
+          key: scribus-source-v1-${{ matrix.scribus-version }}-tar-xz
+          enableCrossOsArchive: true
 
       - name: Validate version
         shell: bash
@@ -127,10 +178,18 @@ jobs:
           else
             SERIES="scribus-devel"
           fi
-          ARCHIVE="$RUNNER_TEMP/scribus-$VERSION.tar.xz"
-          curl -fL --retry 4 \
-            "https://downloads.sourceforge.net/project/scribus/$SERIES/$VERSION/scribus-$VERSION.tar.xz" \
-            -o "$ARCHIVE"
+          ARCHIVE="$GITHUB_WORKSPACE/scribus-source-cache/scribus-$VERSION.tar.xz"
+          if [[ ! -s "$ARCHIVE" ]]; then
+            mkdir -p "$(dirname "$ARCHIVE")"
+            PART="$ARCHIVE.part"
+            curl --fail --location --retry 10 --retry-all-errors --retry-delay 10 \
+              --connect-timeout 30 --max-time 1800 \
+              "https://downloads.sourceforge.net/project/scribus/$SERIES/$VERSION/scribus-$VERSION.tar.xz" \
+              --output "$PART"
+            xz -t "$PART"
+            mv "$PART" "$ARCHIVE"
+          fi
+          xz -t "$ARCHIVE"
           tar -xJf "$ARCHIVE" -C "$RUNNER_TEMP"
           SCRIBUS_SRC="$RUNNER_TEMP/scribus-$VERSION"
           test -f "$SCRIBUS_SRC/CMakeLists.txt"
@@ -195,7 +254,7 @@ jobs:
           files: ./dist/photobookbrowser-${{ env.BUILD_VERSION }}-scribus-${{ matrix.scribus-version }}-linux-x86_64.so
 
   build-macos:
-    needs: cancel-stale
+    needs: [cancel-stale, prepare-linux-sources]
     name: macOS / Scribus 1.7.4
     runs-on: macos-15
     timeout-minutes: 180
@@ -206,6 +265,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Restore cached Scribus 1.7.4 source archive
+        uses: actions/cache/restore@v6
+        with:
+          path: scribus-source-cache/scribus-1.7.4.tar.xz
+          key: scribus-source-v1-1.7.4-tar-xz
+          enableCrossOsArchive: true
 
       - name: Install build dependencies
         run: |
@@ -219,10 +285,18 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=1.7.4
-          ARCHIVE="$RUNNER_TEMP/scribus-${VERSION}.tar.xz"
-          curl -fL --retry 3 \
-            "https://downloads.sourceforge.net/project/scribus/scribus-devel/${VERSION}/scribus-${VERSION}.tar.xz" \
-            -o "$ARCHIVE"
+          ARCHIVE="$GITHUB_WORKSPACE/scribus-source-cache/scribus-${VERSION}.tar.xz"
+          if [[ ! -s "$ARCHIVE" ]]; then
+            mkdir -p "$(dirname "$ARCHIVE")"
+            PART="$ARCHIVE.part"
+            curl --fail --location --retry 10 --retry-all-errors --retry-delay 10 \
+              --connect-timeout 30 --max-time 1800 \
+              "https://downloads.sourceforge.net/project/scribus/scribus-devel/${VERSION}/scribus-${VERSION}.tar.xz" \
+              --output "$PART"
+            xz -t "$PART"
+            mv "$PART" "$ARCHIVE"
+          fi
+          xz -t "$ARCHIVE"
           tar -xJf "$ARCHIVE" -C "$RUNNER_TEMP"
           SCRIBUS_SRC="$RUNNER_TEMP/scribus-${VERSION}"
           test -f "$SCRIBUS_SRC/CMakeLists.txt"
