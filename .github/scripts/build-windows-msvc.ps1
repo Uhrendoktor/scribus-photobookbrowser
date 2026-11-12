@@ -203,7 +203,7 @@ foreach ($targetName in $document.SelectNodes("//msb:TargetName", $namespaces)) 
 # The upstream properties sheet points to a developer-specific dependency kit
 # path. Remove it: this plugin only needs the official host import library and
 # the exact Qt/MSVC libraries installed in this workflow.
-$dependencyPropertyImports = @($document.SelectNodes("//msb:Import[@Project='..\\Scribus-build-props.props']", $namespaces))
+$dependencyPropertyImports = @($document.SelectNodes("//msb:Import[contains(@Project, 'Scribus-build-props.props')]", $namespaces))
 foreach ($node in $dependencyPropertyImports) {
     [void]$node.ParentNode.RemoveChild($node)
 }
