@@ -305,7 +305,7 @@ jobs:
           arch: win64_msvc2022_64
           dir: C:\s\qt
           modules: qt5compat
-          archives: qtsvg
+          archives: qtbase qtsvg
           # Qt 6.11 moved Windows kit metadata into per-kit directories.
           # Pin aqtinstall's merged support until the fix reaches a PyPI release.
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
