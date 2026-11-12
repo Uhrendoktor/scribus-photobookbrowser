@@ -245,13 +245,6 @@ foreach ($libraryDirectories in $document.SelectNodes("//msb:ItemDefinitionGroup
     $libraryDirectories.InnerText = '$(QT6_DIR)\lib;$(SCRIBUS_API_LIB_DIR);%(AdditionalLibraryDirectories)'
 }
 
-$userMacros = $document.SelectSingleNode("//msb:PropertyGroup[@Label='UserMacros']", $namespaces)
-if (-not $userMacros) { throw "The Visual Studio template has no UserMacros property group." }
-$concurrentLibrary = $document.CreateElement("QT6CONCURRENT_LIB", $namespaceUri)
-$concurrentLibrary.SetAttribute("Condition", "'$(Configuration)' == 'Release'")
-$concurrentLibrary.InnerText = "Qt6Concurrent.lib"
-[void]$userMacros.AppendChild($concurrentLibrary)
-
 $targetsImport = $document.SelectSingleNode('//msb:Import[@Project="$(VCTargetsPath)\Microsoft.Cpp.targets"]', $namespaces)
 if (-not $targetsImport) { throw "The Visual Studio template has no Microsoft.Cpp.targets import." }
 
