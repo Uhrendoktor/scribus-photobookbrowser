@@ -180,6 +180,32 @@ if ($scribusSolutionMatches.Count -eq 0) {
 $sourceRoot = Split-Path (Split-Path (Split-Path $scribusSolutionMatches[0].FullName -Parent) -Parent) -Parent
 Write-Host "Using Scribus source root: $sourceRoot"
 
+# Scribus public headers include FreeType's public headers (scface.h -> ft2build.h).
+# Use the release that corresponds to the October 2026 Scribus dependency kit.
+$FreetypeVersion = "2.15.0"
+$FreetypeArchiveSha256 = "6de0090703ff0658ec2886c1de3c1887801d4988b9fd72d622e815a5c5d768c9"
+$FreetypeArchiveUrl = "https://downloads.sourceforge.net/project/freetype/freetype2/$FreetypeVersion/ft2150.zip"
+$freetypeExtract = Join-Path $env:RUNNER_TEMP "freetype-$FreetypeVersion"
+if (Test-Path $freetypeExtract) {
+    Remove-Item -Path $freetypeExtract -Recurse -Force
+}
+New-Item -ItemType Directory -Path $freetypeExtract -Force | Out-Null
+$freetypeArchive = Join-Path $env:RUNNER_TEMP "ft2150.zip"
+Invoke-External "curl.exe" @(
+    "--fail", "--location", "--retry", "4", "--retry-all-errors",
+    "--connect-timeout", "30", "--max-time", "300",
+    $FreetypeArchiveUrl, "--output", $freetypeArchive
+)
+Assert-Sha256 -Path $freetypeArchive -Expected $FreetypeArchiveSha256
+Invoke-External $sevenZip @("x", "-y", "-o$freetypeExtract", $freetypeArchive)
+$freetypeHeader = Get-ChildItem -Path $freetypeExtract -Filter "ft2build.h" -File -Recurse |
+    Select-Object -First 1
+if (-not $freetypeHeader) {
+    throw "FreeType $FreetypeVersion headers archive did not contain ft2build.h."
+}
+$freetypeIncludeDirectory = $freetypeHeader.Directory.FullName
+Write-Host "Using FreeType $FreetypeVersion headers: $freetypeIncludeDirectory"
+
 $pluginSourceDirectory = Join-Path $RepositoryRoot "plugin"
 $scribusPluginDirectory = Join-Path $sourceRoot "scribus\plugins\photobookbrowser"
 New-Item -ItemType Directory -Path $scribusPluginDirectory -Force | Out-Null
@@ -314,6 +340,7 @@ Invoke-External $msbuild @(
     "/p:PlatformToolset=v143",
     "/p:SCRIBUS_CPP_STANDARD=202002",
     "/p:QT6_DIR=$QtRoot",
+    "/p:FREETYPE_INCLUDE_DIR=$freetypeIncludeDirectory",
     "/p:SCRIBUS_API_LIB_DIR=$hostSdkDirectory",
     "/v:minimal"
 )
