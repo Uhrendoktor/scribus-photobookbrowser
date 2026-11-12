@@ -12,9 +12,9 @@ Set-StrictMode -Version Latest
 
 # These checksums are published by the official Scribus SourceForge downloads.
 $ScribusInstallerSha256 = "53b9446319026c4575b53706d4adcf26f0aebb3bc74c41a0fdd5cf89fb535778"
-$ScribusSourceSha256 = "1f9e0b62e38a2ba89cc71d6764b1ec3114f24125b717e45cce7ea7d99ab3fe6b"
+$ScribusSourceSha256 = "2fa0a33ad9c97974a5062ce8d28ad3bfd89e84cb68130055a5d10790b694ff31"
 $ScribusInstallerUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion-windows-x64.exe"
-$ScribusSourceUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion.tar.xz"
+$ScribusSourceUrl = "https://downloads.sourceforge.net/project/scribus/scribus-devel/$ScribusVersion/scribus-$ScribusVersion.7z"
 $QtRoot = $env:QT_ROOT_DIR
 
 function Invoke-External {
@@ -156,20 +156,29 @@ if (-not (Test-Path $importLibrary)) {
 }
 
 # Fetch the matching release sources for Scribus headers and its native MSVC
-# Picture Browser project template.
-$sourceRoot = Join-Path $WorkspaceRoot "src"
-if (Test-Path $sourceRoot) {
-    Remove-Item -Path $sourceRoot -Recurse -Force
+# Picture Browser project template. SourceForge's 7-Zip archive avoids the very
+# slow Windows tar/xz extraction path while retaining a published SHA-256 check.
+$sourceExtract = Join-Path $env:RUNNER_TEMP "scribus-source-extracted"
+if (Test-Path $sourceExtract) {
+    Remove-Item -Path $sourceExtract -Recurse -Force
 }
-New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
-$sourceArchive = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion.tar.xz"
+New-Item -ItemType Directory -Path $sourceExtract -Force | Out-Null
+$sourceArchive = Join-Path $env:RUNNER_TEMP "scribus-$ScribusVersion.7z"
 Invoke-External "curl.exe" @(
     "--fail", "--location", "--retry", "4", "--retry-all-errors",
     "--connect-timeout", "30", "--max-time", "900",
     $ScribusSourceUrl, "--output", $sourceArchive
 )
 Assert-Sha256 -Path $sourceArchive -Expected $ScribusSourceSha256
-Invoke-External "tar.exe" @("-xJf", $sourceArchive, "-C", $sourceRoot, "--strip-components=1")
+Invoke-External $sevenZip @("x", "-y", "-o$sourceExtract", $sourceArchive)
+
+$scribusSolutionMatches = @(Get-ChildItem -Path $sourceExtract -Filter "Scribus.sln" -File -Recurse |
+    Where-Object { $_.FullName -match "[\\/]win32[\\/]msvc2022[\\/]Scribus\.sln$" })
+if ($scribusSolutionMatches.Count -eq 0) {
+    throw "The Scribus 7-Zip source archive did not contain win32\msvc2022\Scribus.sln."
+}
+$sourceRoot = Split-Path (Split-Path (Split-Path $scribusSolutionMatches[0].FullName -Parent) -Parent) -Parent
+Write-Host "Using Scribus source root: $sourceRoot"
 
 $pluginSourceDirectory = Join-Path $RepositoryRoot "plugin"
 $scribusPluginDirectory = Join-Path $sourceRoot "scribus\plugins\photobookbrowser"
