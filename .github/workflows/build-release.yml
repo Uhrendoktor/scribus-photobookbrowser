@@ -278,142 +278,56 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build-windows-mingw:
+  build-windows-msvc:
     needs: cancel-stale
-    name: Windows / Scribus MSYS2 MinGW
+    name: Windows x64 / Scribus 1.7.4 (MSVC 2022)
     runs-on: windows-2022
-    timeout-minutes: 240
+    timeout-minutes: 360
+    permissions:
+      contents: write
+    env:
+      SCRIBUS_VERSION: "1.7.4"
+      BUILD_VERSION: \${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || format('0.0.0-ci.{0}', github.run_number) }}
+
     steps:
-      - name: Checkout PhotoBook Browser
+      - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Checkout MSYS2 Scribus package recipe
-        uses: actions/checkout@v7
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install matching Qt MSVC toolchain
+        uses: jurplel/install-qt-action@v4
         with:
-          repository: msys2/MINGW-packages
-          ref: master
-          path: .deps/MINGW-packages
+          version: "6.11.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          dir: C:\s\qt
+          modules: qt5compat qtsvg
 
-      - name: Set up MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
+      - name: Cache Scribus MSVC dependencies and host import library
+        uses: actions/cache@v4
         with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            base-devel
-            git
-            python
+          path: |
+            C:\s\libs
+            C:\s\Scribus-builds\Scribus-Release-x64-v143
+          key: scribus-msvc-1.7.4-qt6.11.3-libs-20261026-v143-release-x64
 
-      - name: Build Scribus and PhotoBook Browser with MinGW
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          WORKSPACE="$(cygpath -u "$GITHUB_WORKSPACE")"
-          PACKAGE_DIR="$WORKSPACE/.deps/MINGW-packages/mingw-w64-scribus"
-          PLUGIN_STAGE="$(mktemp -d)"
-          mkdir -p "$PLUGIN_STAGE/photobookbrowser"
-          cp -R "$WORKSPACE/plugin/." "$PLUGIN_STAGE/photobookbrowser/"
-          tar -czf "$PACKAGE_DIR/photobookbrowser.tar.gz" -C "$PLUGIN_STAGE" photobookbrowser
+      - name: Build an MSVC plugin for the official Scribus ABI
+        shell: pwsh
+        run: .\.github\scripts\build-windows-msvc.ps1 -RepositoryRoot "$env:GITHUB_WORKSPACE" -ScribusVersion "$env:SCRIBUS_VERSION" -PluginVersion "$env:BUILD_VERSION"
 
-          python - "$PACKAGE_DIR/PKGBUILD" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-          import textwrap
-
-          path = Path(sys.argv[1])
-          source = path.read_text(encoding="utf-8")
-          if "photobookbrowser.tar.gz" not in source:
-              source, source_count = re.subn(
-                  r"source=\(\s*",
-                  "source=(\n  'photobookbrowser.tar.gz'\n  ",
-                  source,
-                  count=1,
-              )
-              if source_count != 1:
-                  raise SystemExit("Could not add the local plugin archive to PKGBUILD")
-              source, checksum_count = re.subn(
-                  r"sha256sums=\(",
-                  "sha256sums=('SKIP' ",
-                  source,
-                  count=1,
-              )
-              if checksum_count != 1:
-                  raise SystemExit("Could not add the matching checksum entry to PKGBUILD")
-
-              marker = "\nbuild() {"
-              if marker not in source:
-                  raise SystemExit("Could not locate the PKGBUILD build() function")
-              before_build, build_section = source.split(marker, 1)
-              close = before_build.rfind("}")
-              if close < 0:
-                  raise SystemExit("Could not locate the end of PKGBUILD prepare()")
-              integration = textwrap.dedent(r'''
-                mkdir -p "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
-                tar -xzf "${srcdir}/photobookbrowser.tar.gz" -C "${srcdir}/${_realname}-${pkgver}/scribus/plugins"
-                python - "${srcdir}/${_realname}-${pkgver}/scribus/plugins/CMakeLists.txt" <<'PLUGIN_CMAKE'
-          from pathlib import Path
-          import re
-          import sys
-
-          cmake_file = Path(sys.argv[1])
-          content = cmake_file.read_text(encoding="utf-8")
-          if not re.search(r"add_subdirectory\s*\(\s*photobookbrowser\s*\)", content, re.I):
-              content, count = re.subn(
-                  r"(^[ \t]*add_subdirectory\s*\(\s*picbrowser\s*\)[ \t]*$)",
-                  r"\1\nadd_subdirectory(photobookbrowser)",
-                  content,
-                  count=1,
-                  flags=re.I | re.M,
-              )
-              if count != 1:
-                  raise SystemExit("Could not locate Scribus' picbrowser CMake entry")
-              cmake_file.write_text(content, encoding="utf-8")
-          PLUGIN_CMAKE
-          ''')
-              source = before_build[:close] + integration + before_build[close:] + marker + build_section
-
-          # Build only the plugin target rather than every Scribus application,
-          # document and bundled plugin target. This is a compile/ABI check.
-          source = source.replace(
-              "cmake --build build-${MSYSTEM}",
-              "cmake --build build-${MSYSTEM} --target photobookbrowser --parallel 4",
-          )
-          package_marker = "package() {"
-          if package_marker not in source:
-              raise SystemExit("Could not locate PKGBUILD package() function")
-          source = source.split(package_marker, 1)[0] + r'''package() {
-            local plugin
-            plugin="$(find "build-${MSYSTEM}" -type f -iname '*photobookbrowser*.dll' -print -quit)"
-            if [[ -z "$plugin" ]]; then
-              echo "PhotoBook Browser DLL was not produced by the build."
-              return 1
-            fi
-            install -Dm755 "$plugin" "$pkgdir${MINGW_PREFIX}/lib/scribus/plugins/photobookbrowser.dll"
-          }
-          '''
-          path.write_text(source, encoding="utf-8")
-          PY
-
-          cd "$PACKAGE_DIR"
-          export MINGW_ARCH=ucrt64
-          makepkg-mingw -sLf --noconfirm
-
-          SCRIBUS_VERSION="$(sed -n 's/^pkgver=//p' PKGBUILD | head -n 1)"
-          PLUGIN="$(find "$PACKAGE_DIR/pkg" -type f -iname '*photobookbrowser*.dll' -print -quit)"
-          if [[ -z "$PLUGIN" ]]; then
-            echo "PhotoBook Browser DLL was not found in the packaged Scribus build."
-            find "$PACKAGE_DIR/pkg" -type f | grep -Ei 'photobook|scribus' | head -n 50 || true
-            exit 1
-          fi
-          mkdir -p "$WORKSPACE/dist"
-          cp "$PLUGIN" "$WORKSPACE/dist/photobookbrowser-ci-scribus-${SCRIBUS_VERSION}-windows-ucrt64.dll"
-          file "$WORKSPACE/dist/"*.dll
-
-      - name: Upload Windows MinGW compile check
+      - name: Upload Windows MSVC plugin
         uses: actions/upload-artifact@v7
         with:
-          name: photobookbrowser-windows-mingw
-          path: dist/*.dll
+          name: photobookbrowser-windows-msvc-scribus-1.7.4
+          path: dist/photobookbrowser-*-scribus-1.7.4-windows-x64-msvc.dll
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish Windows plugin to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          files: dist/photobookbrowser-*-scribus-1.7.4-windows-x64-msvc.dll
