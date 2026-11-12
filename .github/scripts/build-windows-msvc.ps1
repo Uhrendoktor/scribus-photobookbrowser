@@ -60,6 +60,24 @@ foreach ($relativePath in @(
     }
 }
 
+# Scribus' storytext.h includes ICU's public version header. The full Scribus
+# dependency property sheet normally provides ICU_INCLUDE_DIR; this standalone
+# plugin project supplies the same headers from the runner's x64 vcpkg triplet.
+$vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) {
+    throw "VCPKG_INSTALLATION_ROOT is not set on this Windows runner."
+}
+$vcpkg = Join-Path $vcpkgRoot "vcpkg.exe"
+if (-not (Test-Path $vcpkg)) {
+    throw "The Windows runner's vcpkg executable was not found at $vcpkg."
+}
+Invoke-External $vcpkg @("install", "icu:x64-windows")
+$icuIncludeDirectory = Join-Path $vcpkgRoot "installed\x64-windows\include"
+if (-not (Test-Path (Join-Path $icuIncludeDirectory "unicode\uversion.h"))) {
+    throw "ICU development headers were not installed to $icuIncludeDirectory."
+}
+Write-Host "Using ICU include root: $icuIncludeDirectory"
+
 $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
 $sevenZipCommand = Get-Command 7z.exe -ErrorAction SilentlyContinue
 $sevenZip = if ($sevenZipCommand) { $sevenZipCommand.Source } else { "C:\Program Files\7-Zip\7z.exe" }
@@ -285,6 +303,9 @@ foreach ($includeDirectory in $document.SelectNodes("//msb:ItemDefinitionGroup/m
     if ($includeDirectory.InnerText -notmatch "QtConcurrent") {
         $includeDirectory.InnerText = '$(QT6_DIR)\include\QtConcurrent;' + $includeDirectory.InnerText
     }
+    if ($includeDirectory.InnerText -notmatch "ICU_INCLUDE_DIR") {
+        $includeDirectory.InnerText = '$(ICU_INCLUDE_DIR);' + $includeDirectory.InnerText
+    }
 }
 foreach ($dependencies in $document.SelectNodes("//msb:ItemDefinitionGroup/msb:Link/msb:AdditionalDependencies", $namespaces)) {
     $dependencies.InnerText = 'Qt6Core.lib;Qt6Core5Compat.lib;Qt6Gui.lib;Qt6Widgets.lib;Qt6Xml.lib;Qt6Concurrent.lib;scribus-api.lib;%(AdditionalDependencies)'
@@ -352,6 +373,7 @@ Invoke-External $msbuild @(
     "/p:SCRIBUS_CPP_STANDARD=202002",
     "/p:QT6_DIR=$QtRoot",
     "/p:FREETYPE_INCLUDE_DIR=$freetypeIncludeDirectory",
+    "/p:ICU_INCLUDE_DIR=$icuIncludeDirectory",
     "/p:SCRIBUS_API_LIB_DIR=$hostSdkDirectory",
     "/v:minimal"
 )

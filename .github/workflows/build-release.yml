@@ -199,6 +199,10 @@ jobs:
     name: macOS / Scribus 1.7.4
     runs-on: macos-15
     timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || format('0.0.0-ci.{0}', github.run_number) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -268,7 +272,7 @@ jobs:
           file "$PLUGIN"
           mkdir -p "$RUNNER_TEMP/dist"
           EXT="${PLUGIN##*.}"
-          cp "$PLUGIN" "$RUNNER_TEMP/dist/photobookbrowser-0.1.0-scribus-1.7.4-macos-$(uname -m).${EXT}"
+          cp "$PLUGIN" "$RUNNER_TEMP/dist/photobookbrowser-$BUILD_VERSION-scribus-1.7.4-macos-$(uname -m).${EXT}"
 
       - name: Upload macOS compile check
         uses: actions/upload-artifact@v7
@@ -277,6 +281,12 @@ jobs:
           path: ${{ runner.temp }}/dist/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish macOS plugin to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          files: ${{ runner.temp }}/dist/*
 
   build-windows-msvc:
     needs: cancel-stale
@@ -343,3 +353,59 @@ jobs:
         uses: softprops/action-gh-release@v3.0.4
         with:
           files: dist/photobookbrowser-*-scribus-1.7.4-windows-x64-msvc.dll
+
+  publish-desktop-release:
+    name: Publish Windows and macOS plugins to latest release
+    needs: [build-linux, build-macos, build-windows-msvc]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[publish-desktop-assets]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve latest release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          test -n "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download Windows plugin artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: photobookbrowser-windows-msvc-scribus-1.7.4
+          path: release-assets
+
+      - name: Download macOS plugin artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: photobookbrowser-macos-scribus-1.7.4
+          path: release-assets
+
+      - name: Prepare release filenames and verify plugin files
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          windows_asset="$(find release-assets -type f -name '*-scribus-1.7.4-windows-x64-msvc.dll' -print -quit)"
+          macos_asset="$(find release-assets -type f \( -name '*-scribus-1.7.4-macos-*.dylib' -o -name '*-scribus-1.7.4-macos-*.so' \) -print -quit)"
+          test -n "$windows_asset"
+          test -n "$macos_asset"
+          mkdir -p release-upload
+          windows_name="photobookbrowser-${RELEASE_TAG}-scribus-1.7.4-windows-x64-msvc.dll"
+          macos_suffix="${macos_asset##*-scribus-1.7.4-}"
+          macos_name="photobookbrowser-${RELEASE_TAG}-scribus-1.7.4-${macos_suffix}"
+          cp "$windows_asset" "release-upload/$windows_name"
+          cp "$macos_asset" "release-upload/$macos_name"
+          ls -lh release-upload
+
+      - name: Add Windows and macOS plugins to latest release
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: release-upload/*
+          token: ${{ github.token }}
